@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grizliForceExtract"
+version = "0.0.1dev"
+authors = [
+  { name="Peter Watson", email="peter.watson+gFE@inaf.it" },
+]
+description = "A set of tools to aid in the extraction of sources from NIRISS."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "astropy>=5.3",
+    "numpy>=1.24",
+    "matplotlib>=3.6",
+    "tqdm>=4.66",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/PJ-Watson/grizli-Force-Extract"
+"Bug Tracker" = "https://github.com/PJ-Watson/grizli-Force-Extract/issues"
+
+[tool.setuptools.package-data]
+"*" = ["*.*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+extend-exclude = '(.*.txt|.*.md|.*.toml|.*.odg)'
+
+[tool.isort]
+profile = "black"
