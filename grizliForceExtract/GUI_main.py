@@ -6,6 +6,7 @@ from QtImageViewer import QtImageViewer
 from pathlib import Path
 import astropy.io.fits as pf
 from astropy.visualization import (LogStretch, AsinhStretch, ManualInterval, SqrtStretch, LinearStretch)
+from astropy import wcs
 import qimage2ndarray
 import numpy as np
 import time
@@ -18,12 +19,20 @@ class MainWindow(QMainWindow):
 
         layout_h = QHBoxLayout()
 
-        layout_side = QVBoxLayout()
+        left_toolbar = QWidget(self)
+        left_toolbar.setFixedWidth(175)
+        layout_side = QVBoxLayout(left_toolbar)
+        layout_side.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.seg_dir = None
         dir_sel_button = QPushButton('Select Directory', self)
         dir_sel_button.clicked.connect(self.change_directory)
         layout_side.addWidget(dir_sel_button)
+        layout_side.addWidget(Separator())
+
+        self.seg_text = QLabel(f"\n\n", self)
+        layout_side.addWidget(self.seg_text)
+        layout_side.addWidget(Separator())
 
         # Image stretch
         self.stretch = SqrtStretch()
@@ -59,25 +68,35 @@ class MainWindow(QMainWindow):
         layout_side.addWidget(opacity_label)
         layout_side.addWidget(self.opacity_box)
 
-        self.seg_text = QLabel(f"x={0: <6}y={0: <6}\nID={None}", self)
-        layout_side.addWidget(self.seg_text)
 
         self.selected_ids = []
 
         self.invert_box = QCheckBox("Invert image")
         self.invert_box.stateChanged.connect(self.opacity_update)
-        self.invert_box.setStyleSheet("QCheckBox::indicator { width: 20px; height: 20px;}")
+        p = QPalette(self.invert_box.palette())
+        p.setColor(
+            QPalette.ColorGroup.Active, QPalette.ColorRole.Base, QColor(90,90,90),
+            )
+        self.invert_box.setPalette(p)
         layout_side.addWidget(self.invert_box)
 
         layout_side.addWidget(QLabel("Background colour:", self))
 
-        self.frm = QFrame(self)
-        self.frm.setStyleSheet("QWidget { background-color: %s }"
-                               % QColor(120, 120, 120).name())
-        self.frm.mousePressEvent = self.choose_background_colour
-        layout_side.addWidget(self.frm)
+        self.bkg_frm = QFrame(self)
+        self.bkg_frm.mousePressEvent = self.choose_background_colour
+        self.bkg_frm.setMinimumHeight(50)
+        self.bkg_frm.bkg_col = QColor("#787878")
+        self.bkg_frm.setStyleSheet(
+            f"QWidget {{ background-color: {self.bkg_frm.bkg_col.name()} }}"
+        )
+        layout_side.addWidget(self.bkg_frm)
 
-        layout_h.addLayout(layout_side)
+        save_button = QPushButton('Save Map', self)
+        save_button.clicked.connect(self.save_output)
+        layout_side.addWidget(Separator())
+        layout_side.addWidget(save_button)
+
+        layout_h.addWidget(left_toolbar)
 
         self.viewer = QtImageViewer()
         self.viewer.aspectRatioMode = Qt.AspectRatioMode.KeepAspectRatio
@@ -99,7 +118,8 @@ class MainWindow(QMainWindow):
         widget = QWidget()
         widget.setLayout(layout_h)
         self.setCentralWidget(widget)
-        self.change_directory()
+
+        # self.change_directory()
 
     def change_directory(self, event=None):
 
@@ -115,7 +135,7 @@ class MainWindow(QMainWindow):
 
     def click_location(self, modifiers, x, y):
 
-        if not hasattr(self, "seg_data"):
+        if not hasattr(self, "img_array"):
             return
         x = int(x)
         y = int(y)
@@ -135,6 +155,9 @@ class MainWindow(QMainWindow):
 
     def highlight_section(self, seg_id):
 
+        if not hasattr(self, "img_array"):
+            return
+
         if seg_id == [0]:
             seg_map = np.zeros_like(self.seg_data, dtype="uint8")
         else:
@@ -150,14 +173,17 @@ class MainWindow(QMainWindow):
 
     def seg_text_update(self, pos):        
         
-        if not hasattr(self, "seg_data"):
+        if not hasattr(self, "img_array"):
             return
 
         x = int(pos.x())
         y = int(pos.y())
         seg_id = self.seg_data[y, x]
 
-        self.seg_text.setText(f"x={x: <6}y={y: <6}\nID={seg_id}")
+        self.seg_text.setText(
+            f"{wcs.utils.pixel_to_skycoord(x, y, self.wcs).to_string(precision=6)}\n"
+            f"x={x: <6}y={y: <6}\nID={seg_id}"
+        )
 
 
     def interval_update(self, value):
@@ -180,6 +206,9 @@ class MainWindow(QMainWindow):
         
         self.opacity = float(self.opacity_box.currentText().split("%")[0])/100
 
+        if not hasattr(self, "img_array"):
+            return
+
         if self.invert_box.checkState() == Qt.CheckState.Checked:
             self.img_array[:,:,-1] = np.clip(self.opacity*self.seg_mask+self.opacity_mask, a_min=0, a_max=1)*255
         else:
@@ -190,6 +219,9 @@ class MainWindow(QMainWindow):
 
 
     def reload_image(self):
+
+        if not hasattr(self, "img_array"):
+            return
 
         self.img_array[:,:,:-1] = (self.stretch(self.interval(self.data_array[:,:,:-1]))*255).astype('uint8')
         q_img = QImage(self.img_array, self.img_array.shape[1], self.img_array.shape[0], self.img_array.strides[0], QImage.Format.Format_RGBA8888)
@@ -212,6 +244,8 @@ class MainWindow(QMainWindow):
                         self.seg_mask*0.5,
                     ],
                     axis=-1), True)
+
+            self.wcs = wcs.WCS(hdul_seg[0].header)
 
         self.data_array = np.zeros((self.seg_mask.shape[0], self.seg_mask.shape[1], 4))
         self.overlap_mask = np.zeros_like(self.seg_mask, dtype="bool")
@@ -248,6 +282,14 @@ class MainWindow(QMainWindow):
         print ("Formatting image for display...", end="\r")
         img_array[:,:,:-1] = self.stretch(self.interval(img_array[:,:,:-1]))
         self.img_array = (img_array*255).astype('uint8')
+
+        self.opacity = float(self.opacity_box.currentText().split("%")[0])/100
+
+        if self.invert_box.checkState() == Qt.CheckState.Checked:
+            self.img_array[:,:,-1] = np.clip(self.opacity*self.seg_mask+self.opacity_mask, a_min=0, a_max=1)*255
+        else:
+            self.img_array[:,:,-1] = np.clip(self.opacity*self.opacity_mask+self.seg_mask, a_min=0, a_max=1)*255
+
         self.q_img = QImage(self.img_array, self.img_array.shape[1], self.img_array.shape[0], self.img_array.strides[0], QImage.Format.Format_RGBA8888)
         self.viewer.setImage(self.q_img)
         self.viewer.setBackgroundBrush(QColor(120,120,120))
@@ -269,15 +311,26 @@ class MainWindow(QMainWindow):
 
     def choose_background_colour(self, event=None):
 
-        col = QColorDialog.getColor()
+        col = QColorDialog.getColor(self.bkg_frm.bkg_col)
 
         if col.isValid():
-
-            self.frm.setStyleSheet("QWidget { background-color: %s }" 
-                                   % col.name())
+                
+            self.bkg_frm.bkg_col = col
+            self.bkg_frm.setStyleSheet(
+                f"QWidget {{ background-color: {self.bkg_frm.bkg_col.name()} }}"
+            )
             self.viewer.setBackgroundBrush(col)
 
+    def save_output(self, event=None):
+        print ("Need to save here.")
 
+class Separator(QFrame):
+    def __init__(self):
+        super(QFrame, self).__init__()
+        self.setFrameShape(QFrame.Shape.HLine)
+        self.setFrameShadow(QFrame.Shadow.Sunken)
+        self.setLineWidth(3)
+    
 if __name__=="__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
