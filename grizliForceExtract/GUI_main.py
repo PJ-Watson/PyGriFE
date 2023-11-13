@@ -1,6 +1,6 @@
 import sys
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton, QFormLayout, QLineEdit
 from PyQt6.QtGui import QPalette, QColor, QImage, QPixmap, QPainter
 from QtImageViewer import QtImageViewer
 from pathlib import Path
@@ -12,8 +12,10 @@ import numpy as np
 import time
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, filters=["F115W", "F150W", "F200W"]):
         super(MainWindow, self).__init__()
+
+        self.filters = filters
 
         self.setWindowTitle("Object Selection")
 
@@ -25,8 +27,9 @@ class MainWindow(QMainWindow):
         layout_side.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.seg_dir = None
-        dir_sel_button = QPushButton('Select Directory', self)
-        dir_sel_button.clicked.connect(self.change_directory)
+        self.files_window = None
+        dir_sel_button = QPushButton('Select Files', self)
+        dir_sel_button.clicked.connect(self.open_files_window)
         layout_side.addWidget(dir_sel_button)
         layout_side.addWidget(Separator())
 
@@ -91,9 +94,13 @@ class MainWindow(QMainWindow):
         )
         layout_side.addWidget(self.bkg_frm)
 
+
+        combine_button = QPushButton('Combine Selection', self)
+        combine_button.clicked.connect(self.combine_ids)
         save_button = QPushButton('Save Map', self)
         save_button.clicked.connect(self.save_output)
         layout_side.addWidget(Separator())
+        layout_side.addWidget(combine_button)
         layout_side.addWidget(save_button)
 
         layout_h.addWidget(left_toolbar)
@@ -121,6 +128,12 @@ class MainWindow(QMainWindow):
 
         # self.change_directory()
 
+    def open_files_window(self, event=None):
+
+        if self.files_window is None:
+            self.files_window = FilesWindow(self)
+        self.files_window.show()
+
     def change_directory(self, event=None):
 
         if self.seg_dir is None:
@@ -128,10 +141,10 @@ class MainWindow(QMainWindow):
         dir_name = QFileDialog.getExistingDirectory(self, "Open directory", str(self.seg_dir))
         if dir_name:
             self.seg_dir = Path(dir_name)
-            try:
-                self.load_image()
-            except Exception as e:
-                print (e)
+            # try:
+            #     self.load_image()
+            # except Exception as e:
+            #     print (e)
 
     def click_location(self, modifiers, x, y):
 
@@ -141,7 +154,9 @@ class MainWindow(QMainWindow):
         y = int(y)
         seg_id = self.seg_data[y, x]
 
-        if (len(self.selected_ids) > 0) & (modifiers == Qt.KeyboardModifier.ControlModifier):
+        if seg_id in self.selected_ids:
+            self.selected_ids.remove(seg_id)
+        elif (len(self.selected_ids) > 0) & (modifiers == Qt.KeyboardModifier.ControlModifier):
             if seg_id == 0:
                 pass
             elif self.selected_ids == [0]:
@@ -150,6 +165,9 @@ class MainWindow(QMainWindow):
                 self.selected_ids.append(seg_id)
         else:
             self.selected_ids = [seg_id]
+
+        if self.selected_ids == []:
+            self.selected_ids = [0]
 
         self.highlight_section(self.selected_ids)
 
@@ -232,7 +250,7 @@ class MainWindow(QMainWindow):
         t1 = time.time()
         print ("Reading images...", end="\r")
         
-        with pf.open(self.seg_dir / "nis-wfss-ir_seg.fits") as hdul_seg:
+        with pf.open(self.seg_img_path) as hdul_seg:
             self.seg_mask = (hdul_seg[0].data > 0).astype('uint8')[::-1, :]
             self.opacity_mask = 1 - self.seg_mask
             self.seg_data = hdul_seg[0].data[::-1,:]
@@ -252,12 +270,18 @@ class MainWindow(QMainWindow):
 
         self.data_array[:,:,-1] = self.seg_mask
 
-        for i, filt in enumerate(["f200w", "f150w", "f115w"]):
-            
-            with pf.open(self.seg_dir / f"nis-wfss-{filt}_drz_sci.fits") as hdul_sci:
-                self.data_array[:,:,i] = hdul_sci[0].data[::-1, :]
-            with pf.open(self.seg_dir / f"nis-wfss-{filt}_drz_wht.fits") as hdul_wht:
-                self.overlap_mask = self.overlap_mask | (hdul_wht[0].data[::-1, :] > 0)
+        for i, filt_img_path in enumerate([self.r_img_path, self.g_img_path, self.b_img_path]):
+            try:
+                with pf.open(filt_img_path) as hdul_sci:
+                    self.data_array[:,:,i] = hdul_sci[0].data[::-1, :]
+                try:
+                    wht_path = filt_img_path.replace("sci", "wht")
+                    with pf.open(wht_path) as hdul_wht:
+                        self.overlap_mask = self.overlap_mask | (hdul_wht[0].data[::-1, :] > 0)
+                except:
+                    pass
+            except:
+                pass
 
         self.opacity_mask[~self.overlap_mask] = 0
         img_array = self.data_array.copy()
@@ -321,8 +345,29 @@ class MainWindow(QMainWindow):
             )
             self.viewer.setBackgroundBrush(col)
 
+    def combine_ids(self, event=None):
+        if not hasattr(self, "seg_data"):
+            print ("No segmentation mask to modify.")
+            return
+
+        current_selection = np.isin(self.seg_data, self.selected_ids)
+
+        self.seg_data[current_selection] = np.nanmin(self.selected_ids)
+
     def save_output(self, event=None):
-        print ("Need to save here.")
+
+        if not (hasattr(self, "seg_img_path") and hasattr(self, "seg_data")):
+            print ("No segmentation mask loaded.")
+            return
+
+        backup_path = self.seg_img_path.parent / f"{self.seg_img_path.stem}_backup.fits"
+        with pf.open(self.seg_img_path) as seg_hdul:
+            if not backup_path.is_file():
+                seg_hdul.writeto(backup_path)
+            
+            seg_hdul[0].data = self.seg_data[::-1,:]
+
+            seg_hdul.writeto(self.seg_img_path.parent / f"{self.seg_img_path.stem}_modified.fits")
 
 class Separator(QFrame):
     def __init__(self):
@@ -330,9 +375,212 @@ class Separator(QFrame):
         self.setFrameShape(QFrame.Shape.HLine)
         self.setFrameShadow(QFrame.Shadow.Sunken)
         self.setLineWidth(3)
+
+class cQLineEdit(QLineEdit):
+    clicked=pyqtSignal()
+    def __init__(self,*args, **kwargs):
+        super().__init__(*args,**kwargs)
+
+    def mousePressEvent(self,QMouseEvent):
+        # print (self.text())
+        # print (self.parent())
+        if (self.text is None or self.text=="") and (self.parent().recent_dir is None):
+            init = str(Path.home())
+        else:
+            init = self.text()
+        f, _ = QFileDialog.getOpenFileName(self, "Select File", init, "FITS files (*.fits)")
+
+        if f:
+            self.setText(f)
+            self.parent().recent_dir = Path(f).parent
+            # print (self.parent().recent_dir)
+            # try:
+                # Path(f)
+        # .getExistingDirectory(self, "Open directory", str(self.seg_dir))
+        # self.clicked.emit()
+
+class FilesWindow(QWidget):
+    def __init__(self, root):
+        super().__init__()
+        self.root = root
+
+        layout = QVBoxLayout()
+        # self.label = QLabel("Another Window ")
+        # layout.addWidget(self.label)
+
+        self.recent_dir = None
+
+        dir_sel_button = QPushButton('Fill From Directory', self)
+        dir_sel_button.clicked.connect(self.change_directory)
+        layout.addWidget(dir_sel_button)
+        layout.addWidget(Separator())
+
+        sub_layout = QFormLayout()
+        self.seg_line = cQLineEdit(self)
+        sub_layout.addRow("Segmentation Map:", self.seg_line)
+        sub_layout.addRow(Separator())
+        self.stack_line = cQLineEdit(self)
+        sub_layout.addRow("Stacked Image:", self.stack_line)
+        sub_layout.addRow(Separator())
+        self.b_line = cQLineEdit(self)
+        sub_layout.addRow("Blue:", self.b_line)
+        self.g_line = cQLineEdit(self)
+        sub_layout.addRow("Green:", self.g_line)
+        self.r_line = cQLineEdit(self)
+        sub_layout.addRow("Red:", self.r_line)
+        layout.addLayout(sub_layout)
+
+        load_all_button = QPushButton('Load Images', self)
+        load_all_button.clicked.connect(self.load_all)
+        layout.addWidget(Separator())
+        layout.addWidget(load_all_button)
+
+        self.setLayout(layout)
+        self.setMinimumWidth(540)
+
+    def change_directory(self, event=None):
+
+        if self.root.seg_dir is not None:
+            init = str(seg_dir)
+        elif self.recent_dir is None:
+            init = str(self.recent_dir)
+        else:
+            init = str(Path.home())
+
+        dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
+        if dir_name:
+            self.seg_dir = Path(dir_name)
+            print (self.seg_dir)
+
+            try:
+                self.seg_line.setText(str([*self.seg_dir.glob("*ir_seg.fits")][0]))
+            except:
+                print ("Segmentation map not found.")
+
+            try:
+                self.stack_line.setText(str([*self.seg_dir.glob("*ir_drz_sci.fits")][0]))
+            except:
+                print ("Stacked image not found.")
+
+            for f, l in zip(self.root.filters, [self.b_line, self.g_line, self.r_line]):
+                l.setText(str([*self.seg_dir.glob(f"*{f.lower()}_drz_sci.fits")][0]))
+
+    def load_all(self):
+        self.root.seg_img_path = Path(self.seg_line.text())
+        self.root.b_img_path = Path(self.b_line.text())
+        self.root.g_img_path = Path(self.g_line.text())
+        self.root.r_img_path = Path(self.r_line.text())
+        self.root.load_image()
+        
+
+    def printText(self):
+        print("This works")
     
 if __name__=="__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     window.showMaximized()
     app.exec()
+
+# import sys
+# import time
+# from PyQt6.QtWidgets import *
+# from PyQt6.QtGui import *
+# from PyQt6.QtCore import *
+
+
+# class ProcessRunnable(QRunnable):
+#     def __init__(self, target, args):
+#         QRunnable.__init__(self)
+#         self.t = target
+#         self.args = args
+
+#     def run(self):
+#         self.t(*self.args)
+
+#     def start(self):
+#         QThreadPool.globalInstance().start(self)
+
+
+# def run(user_input, log):
+#     text = ""
+#     if user_input == "":
+#         text = "Please enter a value\n"
+#     else:
+#         text = "Test"
+#         # Sleep for 5 seconds
+#         time.sleep(5)
+
+#     QMetaObject.invokeMethod(log, "append", Qt.ConnectionType.QueuedConnection, Q_ARG(str, text))
+
+
+# class LogginOutput(QTextEdit):
+#     def __init__(self, parent=None):
+#         super(LogginOutput, self).__init__(parent)
+
+#         self.setReadOnly(True)
+
+#         self.setLineWrapMode(self.LineWrapMode.NoWrap)
+
+#         self.insertPlainText("")
+
+#     @pyqtSlot(str)
+#     def append(self, text):
+#         self.moveCursor(QTextCursor.MoveOperation.End)
+#         current = self.toPlainText()
+
+#         if current == "":
+#             self.insertPlainText(text)
+#         else:
+#             self.insertPlainText("\n" + text)
+
+#         sb = self.verticalScrollBar()
+#         sb.setValue(sb.maximum())
+
+
+# class App(QWidget):
+#     def __init__(self):
+#         super().__init__()
+
+#         self.init_ui()
+
+#     def init_ui(self):
+#         label = QLabel("Amount")
+#         amount_input = QLineEdit()
+#         submit = QPushButton("Submit", self)
+#         box = LogginOutput(self)
+
+#         submit.clicked.connect(lambda: self.changeLabel(box, amount_input))
+
+#         grid = QGridLayout()
+#         grid.addWidget(label, 0, 0)
+#         grid.addWidget(amount_input, 1, 0)
+#         grid.addWidget(submit, 1, 1)
+#         grid.addWidget(box, 2, 0, 5, 2)
+
+#         self.setLayout(grid)
+#         self.resize(350, 250)
+#         self.setWindowTitle("GetMeStuff Bot v0.1")
+#         self.show()
+
+#     def center(self):
+#         qr = self.frameGeometry()
+#         cp = QGuiApplication.primaryScreen().availableGeometry().center()
+#         qr.moveCenter(cp)
+#         self.move(qr.topLeft())
+
+#     def changeLabel(self, box, user_input):
+#         self.p = ProcessRunnable(target=run, args=(user_input.displayText(), box))
+#         self.p.start()
+#         user_input.clear()
+
+
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     widget = App()
+#     app.exec()
+
+#     # app = QApplication(sys.argv)
+#     # window = MainWindow()
+#     # window.showMaximized()
+#     # app.exec()
