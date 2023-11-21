@@ -35,6 +35,7 @@ except ImportError:
 
 __author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
 __version__ = '2.0.0'
+# Modified in part by PJW (scroll direction, zoom location, etc)
 
 
 class QtImageViewer(QGraphicsView):

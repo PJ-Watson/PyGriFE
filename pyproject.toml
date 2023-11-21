@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0","oldest-supported-numpy", "wheel", "Cython"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -22,6 +22,10 @@ dependencies = [
     "matplotlib>=3.6",
     "tqdm>=4.66",
     "pyqt6>=6.6.0",
+    # "qimage2ndarray @ git+https://github.com/hmeine/qimage2ndarray",
+    # "grizli [jwst] @ git+https://github.com/gbrammer/grizli",
+    # "eazy @ git+https://github.com/gbrammer/eazy-py",
+    # "dust_attenuation @ git+https://github.com/gbrammer/dust_attenuation"
 ]
 
 [project.urls]

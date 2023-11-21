@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton, QFormLayout, QLineEdit
 from PyQt6.QtGui import QPalette, QColor, QImage, QPixmap, QPainter
-from QtImageViewer import QtImageViewer
+# from .QtImageViewer import QtImageViewer
 from pathlib import Path
 import astropy.io.fits as pf
 from astropy.visualization import (LogStretch, AsinhStretch, ManualInterval, SqrtStretch, LinearStretch)
@@ -10,7 +10,8 @@ from astropy import wcs
 import qimage2ndarray
 import numpy as np
 import time
-from seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
+from .seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
+from .grizli_functions import GrizliExtractor
 import json
 
 class GrizliGUI(SegMapViewer):
@@ -25,6 +26,7 @@ class GrizliGUI(SegMapViewer):
         self.prep_dir = None
         self.field_name = ""
         self.new_directory = new_directory
+        self.ge = None
 
     def open_files_window(self, event=None):
 
@@ -53,6 +55,15 @@ class GrizliGUI(SegMapViewer):
     def extract_object(self, event=None):
 
         print (self.selected_ids)
+
+        self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
+        self.new_dir_path.mkdir(exist_ok=True, parents=True)
+
+        if self.ge is None:
+            self.ge = GrizliExtractor(self.field_name, self.prep_dir, self.new_dir_path)
+        if not hasattr(self.ge, "grp"):
+            self.ge.load_contamination_maps()
+        self.ge.extract_spectra(self.selected_ids)
 
 
 class GrizliFilesWindow(FilesWindow):

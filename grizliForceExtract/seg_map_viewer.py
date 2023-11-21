@@ -2,7 +2,7 @@ import sys
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton, QFormLayout, QLineEdit
 from PyQt6.QtGui import QPalette, QColor, QImage, QPixmap, QPainter
-from QtImageViewer import QtImageViewer
+from .QtImageViewer import QtImageViewer
 from pathlib import Path
 import astropy.io.fits as pf
 from astropy.visualization import (LogStretch, AsinhStretch, ManualInterval, SqrtStretch, LinearStretch)
