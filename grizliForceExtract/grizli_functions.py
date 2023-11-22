@@ -175,8 +175,8 @@ class GrizliExtractor:
 
     def extract_sep(self, obj_id, threshold=1.8):
 
-        # x = [0,6000]
-        # y = [0,6000]
+        x = [0,6000]
+        y = [0,6000]
 
         x = [2750,3250]
         y = [1450,2000]

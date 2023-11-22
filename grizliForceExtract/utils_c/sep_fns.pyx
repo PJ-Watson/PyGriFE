@@ -238,7 +238,7 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
 
     cdef int ew, eh, mw, mh, sw, sh
     cdef np.uint8_t[:,:] buf, ebuf, mbuf, sbuf
-    cdef np.uint8_t[:] idbuf, countbuf
+    cdef np.int_t[::1] idbuf, countbuf
 
     # Clear im fields we might not touch (everything besides data, dtype, w, h)
     im.noise = NULL
@@ -318,11 +318,15 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
         # im.segids = np.unique(segmap).ascontiguousarray(dtype=ctypes.c_int)
         # from cython.view cimport array as cy_array
         ids, counts = np.unique(segmap, return_counts=True)
-        print (ids, counts)
-        segids = np.ascontiguousarray(ids[1:], dtype=np.dtype("i"))
-        idcounts = np.ascontiguousarray(counts[1:], dtype=np.dtype("i"))
-        idbuf = segids.view(dtype=np.uint8)
-        countbuf = idcounts.view(dtype=np.uint8)
+        segids = np.ascontiguousarray(ids[1:], dtype=np.int_)
+        idcounts = np.ascontiguousarray(counts[1:], dtype=np.int_)
+        print (segids, idcounts)
+        idbuf = segids.view()
+        countbuf = idcounts.view()
+        # idbuf = segids.view(dtype=np.int_)
+        # countbuf = idcounts.view(dtype=np.int_)
+        # idbuf = segids.view(dtype=np.int32)
+        # countbuf = idcounts.view(dtype=np.int32)
         im.segids = <int*>&idbuf[0]
         im.idcounts = <int*>&countbuf[0]
 
@@ -336,7 +340,7 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
         # print (im.segids)
     # im.segids = np.zeros([], dtype=int)
         # <int*>segids.data
-        im.numids = len(ids[1:])
+        im.numids = len(segids)
         print (f"Unique ids: {im.numids}.\n")
         sbuf = segmap.view(dtype=np.uint8)
         im.segmap = <void*>&sbuf[0, 0]
