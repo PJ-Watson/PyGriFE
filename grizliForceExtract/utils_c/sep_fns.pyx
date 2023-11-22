@@ -230,7 +230,6 @@ cdef int _assert_ok(int status) except -1:
 
     raise Exception(msg)
 
-
 cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
                        sep_image *im) except -1:
     """Helper function for functions accepting data, error, mask & segmap arrays.
@@ -238,7 +237,7 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
 
     cdef int ew, eh, mw, mh, sw, sh
     cdef np.uint8_t[:,:] buf, ebuf, mbuf, sbuf
-    cdef np.int_t[::1] idbuf, countbuf
+    cdef np.int32_t[:] idbuf, countbuf
 
     # Clear im fields we might not touch (everything besides data, dtype, w, h)
     im.noise = NULL
@@ -318,11 +317,14 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
         # im.segids = np.unique(segmap).ascontiguousarray(dtype=ctypes.c_int)
         # from cython.view cimport array as cy_array
         ids, counts = np.unique(segmap, return_counts=True)
-        segids = np.ascontiguousarray(ids[1:], dtype=np.int_)
-        idcounts = np.ascontiguousarray(counts[1:], dtype=np.int_)
+        segids = np.ascontiguousarray(ids[1:].astype(dtype=np.int32))
+        idcounts = np.ascontiguousarray(counts[1:].astype(dtype=np.int32))
         print (segids, idcounts)
-        idbuf = segids.view()
-        countbuf = idcounts.view()
+        print (segids.flags, segids.strides)
+        print (idcounts.flags, idcounts.strides)
+        print (segids.dtype, idcounts.dtype)
+        idbuf = segids.view(dtype=np.int32)
+        countbuf = idcounts.view(dtype=np.int32)
         # idbuf = segids.view(dtype=np.int_)
         # countbuf = idcounts.view(dtype=np.int_)
         # idbuf = segids.view(dtype=np.int32)
@@ -386,6 +388,7 @@ default_kernel = np.array([[1.0, 2.0, 1.0],
                            [1.0, 2.0, 1.0]], dtype=np.float32)
 
 @cython.boundscheck(True)
+@cython.wraparound(True)
 def extract(np.ndarray data not None, float thresh, err=None, var=None,
             gain=None, np.ndarray mask=None, double maskthresh=0.0,
             int minarea=5,

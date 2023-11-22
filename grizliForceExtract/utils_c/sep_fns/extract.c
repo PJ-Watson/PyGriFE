@@ -23,6 +23,7 @@
 /* Note: was scan.c in SExtractor. */
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -189,7 +190,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   PIXTYPE *sigscan, *workscan;
   float *convnorm;
   int *start, *end, *survives;
-  int *segids, *idcounts;
+  // int *segids, *idcounts;
   pixstatus *psstack;
   char errtext[512];
   sep_catalog *cat;
@@ -213,18 +214,42 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   w = image->w;
   h = image->h;
   numids = image->numids;
-  segids = image->segids;
-  idcounts = image->idcounts;
+  // segids = image->segids;
+  // idcounts = image->idcounts;
   isvarthresh = 0;
   relthresh = 0.0;
   pixvar = 0.0;
   pixsig = 0.0;
   isvarnoise = 0;
 
-  // idinfostruct (*idinfo)[numids];
-  idinfostruct *idinfo;
-  memset(&deblendctx, 0, sizeof(deblendctx));
+  // idinfostruct *idinfo;
+  idinfostruct idinfo[numids];
+  printf("\nInfo:");
+  // printf("%zu", numids);
+  printf("%d; ", numids);
+  printf("%d", image->segids[20]);  
+  for (i = 4040; i < numids; i++) {
+  //   // update(&info[i], initinfo)
+  //   // &info[i] = initinfo;
+    printf("Current iteration: %d, ", i);
+    // printf("id=%d.", *(image->segids+i));
+    printf("id=%d.", image->segids[i]);
+    printf("counts=%d.\n", *(image->idcounts+i));
+  }
+  for (i = 4040; i < numids; i++) {
+  //   // update(&info[i], initinfo)
+  //   // &info[i] = initinfo;
+    printf("Current iteration: %d, ", i);
+    // printf("id=%d.", *(image->segids+i));
+    printf("id=%d.", image->segids[i]);
+    printf("counts=%d.\n", *(image->idcounts+i));
+  }
+  // printf("%d", image->numids);
+  printf("\n");
 
+  // idinfostruct *idinfo;
+
+  memset(&deblendctx, 0, sizeof(deblendctx));
 
   printf("Initial dimensions in sep_extract: %d, %d\n", w, h);
 
@@ -277,12 +302,13 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
 
   /*Allocate memory for buffers */
   stacksize = w + 1;
-  if (image->segmap) {
-    QMALLOC(idinfo, idinfostruct, 1, status);
-  } else {
-    QMALLOC(info, infostruct, stacksize, status);
-    QCALLOC(store, infostruct, stacksize, status);
-  }
+  // if (image->segmap) {
+  //   QMALLOC(idinfo, idinfostruct, numids, status);
+  // } else {
+  // if (!image->segmap) {
+  QMALLOC(info, infostruct, stacksize, status);
+  QCALLOC(store, infostruct, stacksize, status);
+  // }
   QMALLOC(marker, char, stacksize, status);
   QMALLOC(dummyscan, PIXTYPE, stacksize, status);
   QMALLOC(psstack, pixstatus, stacksize, status);
@@ -341,7 +367,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   //   printf("%s", "Why?");
   // };
 
-  printf("sbuf type: %d\n", image->sdtype);
+  printf("sbuf type: %d", image->sdtype);
 
   // FILE *fp;
   // fp = fopen("info.txt", "a");
@@ -358,53 +384,95 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   initinfo.flag = 0;
   initinfo.firstpix = initinfo.lastpix = -1;
 
+  printf("Succesful?");
+
+
+  for (i = 4040; i < numids; i++) {
+  //   // update(&info[i], initinfo)
+  //   // &info[i] = initinfo;
+    printf("Current iteration: %d, ", i);
+    // printf("id=%d.", *(image->segids+i));
+    printf("id=%d.", image->segids[i]);
+    printf("counts=%d.\n", *(image->idcounts+i));
+  }
+
+  printf("Pass 1");
+
+  // if (image->segmap) {
+  //   for (i = 0; i < 500; i++) {
+  //     printf("Current iteration: %d, ", i);
+  //     printf("id=%d.", *(image->segids+i));
+  //     printf("counts=%d.\n", *(image->idcounts+i));
+  //   }
+  // }
+  // printf("Pass 2");
+  // goto exit;
+
   // if (image->segmap) {
   //   for (i = 0; i < numids; i++) {
   //     printf("counts=%d.\n", idcounts[i]);
   //   }
   // }
 
+  idinfostruct tmpinfo;
   if (image->segmap) {
     sscan = sbuf.midline;
     // CHECK THIS!!
     printf("Number of ids at this loc: %d.\n", numids);
-    idinfo[0].pixnb = 0;
-    idinfo[0].flag = 0;
-    // idinfo[0].pixptr = (LONG*)malloc(sizeof(LONG)*idcounts[0]);
-    QMALLOC(idinfo[0].pixptr, LONG, idcounts[0], status); /* This was previously almost working */
+    // printf("flag %d", tmpinfo.flag);
+    // printf("pixnb %d", tmpinfo.pixnb);
+    // // printf("%d", tmpinfo.flag);
+    // tmpinfo.pixnb = 0;
+    // tmpinfo.flag = 0;
+    // LONG* tmppointer = (LONG*)malloc(idcounts[0] * sizeof(LONG));
+    // idinfo[0].pixnb = 0;
+    // idinfo[0].flag = 0;
+    // // idinfo[0].pixptr = (LONG*)malloc(sizeof(LONG)*idcounts[0]);
+    // QMALLOC(idinfo[0].pixptr, LONG, idcounts[0], status); /* This was previously almost working */
     printf("WOrked here?");
+    printf("Any luck?");
     for (i = 0; i < numids; i++) {
-      // update(&info[i], initinfo)
-      // &info[i] = initinfo;
-      // printf("Current iteration: %d, ", i);
+      // tmpinfo.pixnb = 0;
+      // tmpinfo.flag = 0;
+    //   // update(&info[i], initinfo)
+    //   // &info[i] = initinfo;
+    //   // printf("Current iteration: %d, ", i);
       // printf("id=%d.", segids[i]);
       // printf("counts=%d.\n", idcounts[i]);
-      // int ididx=*idcounts+i;
+    //   // int ididx=*idcounts+i;
       idinfo[i].pixnb = 0;
       idinfo[i].flag = 0;
-      // (idinfo[i].flag);
-      // // QCALLOC(idinfo[i].pixptr, int, 1, status)
-      // // printf("%d, ", idcounts[i]);
-      // // printf("pixels=%d.\n", idinfo[i].pixnb);
-      // // idinfo[i].pixptr = malloc(idcounts[i]*sizeof(LONG));
-      // QMALLOC(idinfo[i].pixptr, LONG, idcounts[i], status); /* This was previously almost working */
-
-      // idinfo[i].pixptr = realloc(idinfo[i].pixptr, sizeof(LONG)*idcounts[i]);
-      idinfo[i].pixptr = (LONG*)malloc(sizeof(LONG)*idcounts[i]);
-      //  * (int)idinfo[ididx].pixnb);
-      // print ()
-      // printf("id=%d.", segids[i]);
-      // printf("counts=%d.\n", idcounts[i]);
+    //   // (idinfo[i].flag);
+    //   // // QCALLOC(idinfo[i].pixptr, int, 1, status)
+    //   // // printf("%d, ", idcounts[i]);
+    //   // // printf("pixels=%d.\n", idinfo[i].pixnb);
+    //   // // idinfo[i].pixptr = malloc(idcounts[i]*sizeof(LONG));
+    //   // QMALLOC(idinfo[i].pixptr, LONG, idcounts[i], status); /* This was previously almost working */
+    //   // idinfo[i].pixptr = realloc(idinfo[i].pixptr, sizeof(LONG)*idcounts[i]);
+      idinfo[i].pixptr = (LONG*)malloc(*(image->idcounts+i) * sizeof(LONG));
+    //   //  * (int)idinfo[ididx].pixnb);
+    //   // print ()
+    //   // printf("id=%d.", segids[i]);
+    //   // printf("counts=%d.\n", idcounts[i]);
     }
     printf("Succesfully allocated memory.");
   }
 
   // if (image->segmap) {
-  //   for (i = 0; i < numids; i++) {
-  //     printf("Current iteration: %d, id=%d. ", i, segids[i]);
-  //     printf("pixnb: %d, flag: %d.\n", idinfo[i].pixnb, idinfo[i].flag);
+  //   for (i = 0; i < 500; i++) {
+  //     printf("Current iteration: %d, ", i);
+  //     printf("id=%d\n", *(image->segids+i));
+  //     printf("pixnb: %d, ", idinfo[i].pixnb);
+  //     printf("flag: %d.\n", idinfo[i].flag);
   //   }
   // }
+  if (image->segmap) {
+    for (i = 4040; i < numids; i++) {
+      printf("Current iteration: %d, ", i);
+      printf("id=%d.", *(image->segids+i));
+      printf("counts=%d.\n", *(image->idcounts+i));
+    }
+  }
 
   // if (image->segmap)
     
@@ -565,7 +633,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
         //   luflag = (sscan[xl] > 0) ? 1 : 0;
         // }
         // luflag = (sscan[xl] > 0) ? 1 : 0;
-        if ((int)sscan[xl]>0) {
+        if (sscan[xl]>0) {
           // printf("%d",(int)sscan[xl]);
 
           if (xl == 0 || xl == w - 1)
@@ -587,13 +655,42 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
           if (PLISTEXIST(thresh))
             PLISTPIX(pixt, thresh) = thresh;
 
-          int it;
-          for (it=0; it<numids; it++) {
+          // printf("%f", thresh);
+
+          // int it;
+          for (ididx=0; ididx<numids; ididx++) {
             // printf("Iterator: %d, ", it);
             // printf("ID: %d .  ", segids[it]);
-            if (segids[it]==(int)sscan[xl]) {
+            if (image->segids[ididx]==(int)sscan[xl]) {
               // printf("Broken the loop, %d=%d", segids[it], (int)sscan[xl]);
-              ididx = it;
+              // ididx = it;
+              if (idinfo[ididx].pixnb == 0) {
+                idinfo[ididx].pixptr[0] = cn;
+                // start[(int)sscan[xl]] = xl;
+                // info[ididx].firstpix = xl;
+                // info[ididx].lastpix = xl;
+                // info[(int)sscan[xl]] = initinfo;
+                idinfo[ididx].pixnb = 1;
+                // printf("Object %d, firstpix: %d",(int)sscan[xl],info->firstpix);
+                // printf("Object %d, flag: %d",(int)sscan[xl],info->flag);
+                // printf("Object %d, lastpix: %d",(int)sscan[xl],info->lastpix);
+                // printf("Object %d, pixnb: %d",(int)sscan[xl],info->pixnb);
+                // printf("%f", pixel)
+              } else {
+                // info[(int)sscan[xl]].lastpix = xl;
+                // info[(int)sscan[xl]].pixnb++;
+                // printf("Current size: %d.\n", idinfo[ididx].pixnb);
+                idinfo[ididx].pixptr[idinfo[ididx].pixnb] = cn;
+                idinfo[ididx].pixnb++;
+                // printf("Current size: %d.\n", idinfo[ididx].pixnb);
+                // idinfo[ididx].pixptr = realloc(idinfo[ididx].pixptr, sizeof(LONG) * (int)idinfo[ididx].pixnb);
+                
+                // update(&info[ididx], &curpixinfo, pixel);
+                // printf("%s, ", pixel);
+                // printf("%d, ", xl);
+                // printf("%d, ", yl);
+                // printf("%f, ", cdnewsymbol);
+              };
               break;
             }
           }
@@ -608,35 +705,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
           // printf("lastpix: %d, ",info[(int)sscan[xl]].lastpix);
           // printf("pixnb: %d, ", info[(int)sscan[xl]].pixnb);
           // printf("Current id %d, position %d, count %d.\n", segids[ididx], ididx, info[ididx].pixnb);
-          if (idinfo[ididx].pixnb == 0) {
-
-            idinfo[ididx].pixptr[0] = xl;
-            // start[(int)sscan[xl]] = xl;
-            // info[ididx].firstpix = xl;
-            // info[ididx].lastpix = xl;
-            // info[(int)sscan[xl]] = initinfo;
-            idinfo[ididx].pixnb = 1;
-            // printf("Object %d, firstpix: %d",(int)sscan[xl],info->firstpix);
-            // printf("Object %d, flag: %d",(int)sscan[xl],info->flag);
-            // printf("Object %d, lastpix: %d",(int)sscan[xl],info->lastpix);
-            // printf("Object %d, pixnb: %d",(int)sscan[xl],info->pixnb);
-            // printf("%f", pixel)
-          } else {
-            // info[(int)sscan[xl]].lastpix = xl;
-            // info[(int)sscan[xl]].pixnb++;
-            // printf("Current size: %d.\n", idinfo[ididx].pixnb);
-            idinfo[ididx].pixptr[idinfo[ididx].pixnb] = xl;
-            idinfo[ididx].pixnb++;
-            // printf("Current size: %d.\n", idinfo[ididx].pixnb);
-            // idinfo[ididx].pixptr = realloc(idinfo[ididx].pixptr, sizeof(LONG) * (int)idinfo[ididx].pixnb);
-            
-            // update(&info[ididx], &curpixinfo, pixel);
-            // printf("%s, ", pixel);
-            // printf("%d, ", xl);
-            // printf("%d, ", yl);
-            // printf("%f, ", cdnewsymbol);
-          }
-
+          
         // printf("%d %d %d\n", xl, yl, 1);
         // fprintf(fp, "%d %d %d\n", xl, yl, 1);
         // fflush(fp);
@@ -860,6 +929,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   } /*---------------- End of the loop over the y's -----------------------*/
 
   printf("%s", "Reached here.\n");
+  fflush(stdout);
   // printf("\n\nObject %d, firstpix: %d",1878,info[1878].firstpix);
   // printf("Object %d, flag: %d",1878,info[1878].flag);
   // printf("Object %d, lastpix: %d",1878,info[1878].lastpix);
@@ -876,12 +946,16 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   if (image->segmap) {
     for (i = 0; i < numids; i++) {
       // printf("Test %d", i);
-      printf("Current iteration: %d, id=%d, npix=%d.\n", i, segids[i], idinfo[i].pixnb);
+      // printf("Current iteration: %d, id=%d, npix=%d.\n", i, image->segids[i], idinfo[i].pixnb);
       // printf("npix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
-      // status = singleobjanalyse(&idinfo)
+      if (i>2110 && i<2130) {
+        singleobjanalyse(i, &idinfo[i], &objlist, 0, image->gain);
+      }
     }
-    // printf("I've tried so hard, and got this far.");
-    // goto exit;
+    printf("I've tried so hard, and got this far.");
+    fflush(stdout);
+    // return status;
+    goto exit;
     // status = sortit(&info[1878], &objlist, minarea, finalobjlist,
     //                               deblend_nthresh, deblend_cont, image->gain,
     //                               &deblendctx);
@@ -916,7 +990,10 @@ exit:
   freedeblend(&deblendctx);
   free(pixel);
   if (image->segmap) {
-    free(idinfo);
+    for (i=0; i<numids; i++) {
+      free(idinfo[i].pixptr);
+    };
+    // free(idinfo);
   } else {
     free(info);
     free(store);
