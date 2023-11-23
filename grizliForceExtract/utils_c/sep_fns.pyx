@@ -237,7 +237,6 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
 
     cdef int ew, eh, mw, mh, sw, sh
     cdef np.uint8_t[:,:] buf, ebuf, mbuf, sbuf
-    cdef np.int32_t[:] idbuf, countbuf
 
     # Clear im fields we might not touch (everything besides data, dtype, w, h)
     im.noise = NULL
@@ -310,40 +309,30 @@ cdef int _parse_arrays(np.ndarray data, err, var, mask, segmap,
         if sw != im.w or sh != im.h:
             raise ValueError("size of segmap array must match data")
         im.sdtype = _get_sep_dtype(segmap.dtype)
-        # ids_buf = np.ascontiguousarray(np.unique(segmap), dtype=ctypes.c_int)
-        # print (ids_buf)
-        # idbuf = np.unique(segmap).view(dtype=np.uint8)
-        # im.segids = <void*>&idbuf[0]
-        # im.segids = np.unique(segmap).ascontiguousarray(dtype=ctypes.c_int)
-        # from cython.view cimport array as cy_array
-        ids, counts = np.unique(segmap, return_counts=True)
-        segids = np.ascontiguousarray(ids[1:].astype(dtype=np.int32))
-        idcounts = np.ascontiguousarray(counts[1:].astype(dtype=np.int32))
-        print (segids, idcounts)
-        print (segids.flags, segids.strides)
-        print (idcounts.flags, idcounts.strides)
-        print (segids.dtype, idcounts.dtype)
-        idbuf = segids.view(dtype=np.int32)
-        countbuf = idcounts.view(dtype=np.int32)
-        # idbuf = segids.view(dtype=np.int_)
-        # countbuf = idcounts.view(dtype=np.int_)
+        # ids, counts = np.unique(segmap, return_counts=True)
+        # ids = ids[1:]
+        # counts = counts[1:]
+        # segids = np.ascontiguousarray(ids.astype(dtype=np.int32))
+        # idcounts = np.ascontiguousarray(counts.astype(dtype=np.int32))
+        # print (segids, idcounts)
+        # print (segids.flags, segids.strides)
+        # print (idcounts.flags, idcounts.strides)
+        # print (segids.dtype, idcounts.dtype)
         # idbuf = segids.view(dtype=np.int32)
         # countbuf = idcounts.view(dtype=np.int32)
-        im.segids = <int*>&idbuf[0]
-        im.idcounts = <int*>&countbuf[0]
+        # # idbuf = segids.view(dtype=np.int_)
+        # # countbuf = idcounts.view(dtype=np.int_)
+        # # idbuf = segids.view(dtype=np.int32)
+        # # countbuf = idcounts.view(dtype=np.int32)
+        # im.segids = <int*>&idbuf[0]
+        # im.idcounts = <int*>&countbuf[0]
 
-        
-        # print (segids)
-        # # im.segids = 
-        # sg = cy_array(shape=len(segids), itemsize=sizeof(int), format="i")
-        # for s in segids:
-        #     sg[i] = s
-        # im.segids = <int*>PyMem_Malloc(len(segids)*sizeof(int))
-        # print (im.segids)
-    # im.segids = np.zeros([], dtype=int)
-        # <int*>segids.data
-        im.numids = len(segids)
-        print (f"Unique ids: {im.numids}.\n")
+        # im.numids = len(segids)
+
+        # for i in range(4050,im.numids):
+        #     print (i, im.segids[i])
+
+        # print (f"Unique ids: {im.numids}.\n")
         sbuf = segmap.view(dtype=np.uint8)
         im.segmap = <void*>&sbuf[0, 0]
 
@@ -500,9 +489,24 @@ def extract(np.ndarray data not None, float thresh, err=None, var=None,
     cdef np.int32_t *segmap_ptr
     cdef int *objpix
     cdef sep_image im
+    cdef np.int32_t[:] idbuf, countbuf
 
     if type(segmentation_map) is np.ndarray:
         _parse_arrays(data, err, var, mask, segmentation_map, &im)
+
+        ids, counts = np.unique(segmentation_map, return_counts=True)
+        # ids = ids[1:]
+        # counts = counts[1:]
+        segids = np.ascontiguousarray(ids[1:].astype(dtype=np.int32))
+        idcounts = np.ascontiguousarray(counts[1:].astype(dtype=np.int32))
+        idbuf = segids.view(dtype=np.int32)
+        countbuf = idcounts.view(dtype=np.int32)
+        im.segids = <int*>&idbuf[0]
+        im.idcounts = <int*>&countbuf[0]
+
+        im.numids = len(segids)
+
+        print (f"Unique ids: {im.numids}.\n")
     else:
         _parse_arrays(data, err, var, mask, None, &im)
     im.maskthresh = maskthresh

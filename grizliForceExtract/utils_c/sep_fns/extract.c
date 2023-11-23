@@ -170,7 +170,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   size_t mem_pixstack;
   int nposize, oldnposize;
   int w, h;
-  int co, i, luflag, pstop, xl, xl2, yl, cn, ididx, numids;
+  int co, i, j, luflag, pstop, xl, xl2, yl, cn, ididx, numids;
   int stacksize, convn, status;
   int bufh;
   int isvarthresh, isvarnoise;
@@ -221,9 +221,24 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   pixvar = 0.0;
   pixsig = 0.0;
   isvarnoise = 0;
+  idinfostruct idinfo[numids];
+
+  // int seg1d[w*h];
+  // if (image->segmap) {
+  //   for (i=0; i < h; i++) {
+  //     for (j=0; j < w; j++) {
+  //       // seg1d[w*i+j] = image->segmap[]
+  //       printf("%s,", image->segmap+w*i+j);
+  //     }
+  //   }
+  // }
+
+  for (i=numids-5; i<numids; i++) {
+    printf("Iterator=%d, segid=%d, idcounts=%d.\n", i, image->segids[i], image->idcounts[i]);
+  };
+  // goto exit;
 
   // idinfostruct *idinfo;
-  idinfostruct idinfo[numids];
   printf("\nInfo:");
   // printf("%zu", numids);
   printf("%d; ", numids);
@@ -944,13 +959,13 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   // }
   // printf("Fucking why.");
   if (image->segmap) {
-    for (i = 0; i < numids; i++) {
+    for (i = 2120; i < 2130; i++) {
       // printf("Test %d", i);
-      // printf("Current iteration: %d, id=%d, npix=%d.\n", i, image->segids[i], idinfo[i].pixnb);
+      printf("Current iteration: %d, id=%d, npix=%d.\n", i, image->segids[i], idinfo[i].pixnb);
       // printf("npix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
-      if (i>2110 && i<2130) {
+      // if (i>2110 && i<2130) {
         singleobjanalyse(i, &idinfo[i], &objlist, 0, image->gain);
-      }
+      // }
     }
     printf("I've tried so hard, and got this far.");
     fflush(stdout);
@@ -959,20 +974,21 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
     // status = sortit(&info[1878], &objlist, minarea, finalobjlist,
     //                               deblend_nthresh, deblend_cont, image->gain,
     //                               &deblendctx);
-  }
+  } else {
 
-  /* convert `finalobjlist` to an array of `sepobj` structs */
-  /* if cleaning, see which objects "survive" cleaning. */
-  if (clean_flag) {
-    /* Calculate mthresh for all objects in the list (needed for cleaning) */
-    for (i = 0; i < finalobjlist->nobj; i++) {
-      status = analysemthresh(i, finalobjlist, minarea, thresh);
-      if (status != RETURN_OK)
-        goto exit;
+    /* convert `finalobjlist` to an array of `sepobj` structs */
+    /* if cleaning, see which objects "survive" cleaning. */
+    if (clean_flag) {
+      /* Calculate mthresh for all objects in the list (needed for cleaning) */
+      for (i = 0; i < finalobjlist->nobj; i++) {
+        status = analysemthresh(i, finalobjlist, minarea, thresh);
+        if (status != RETURN_OK)
+          goto exit;
+      }
+
+      QMALLOC(survives, int, finalobjlist->nobj, status);
+      clean(finalobjlist, clean_param, survives);
     }
-
-    QMALLOC(survives, int, finalobjlist->nobj, status);
-    clean(finalobjlist, clean_param, survives);
   }
 
   /* convert to output catalog */

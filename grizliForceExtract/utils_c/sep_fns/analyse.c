@@ -580,6 +580,7 @@ void singleobjanalyse(int no, idinfostruct *objinfo, objliststruct *objlist, int
 
 
   printf("Centre: (%f,%f).\n", obj->mx, obj->my);
+  printf("x2, y2, xy: (%f,%f, %f).\n", obj->mx2, obj->my2, obj->mxy);
   printf("Flux: %f.\n", obj->dflux);
   printf("a, b: (%f,%f).\n", obj->a, obj->b);
   printf("dnpix: %d.\n", obj->dnpix);
