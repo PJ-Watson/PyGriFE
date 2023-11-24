@@ -119,35 +119,36 @@ void  preanalyse(int no, objliststruct *objlist)
   xpeak = ypeak = xcpeak = ycpeak = 0; /* avoid -Wall warnings */
 
   /*-----  integrate results */
-  for (pixt=pixel+obj->firstpix; pixt>=pixel; pixt=pixel+PLIST(pixt,nextpix))
-    {
-      x = PLIST(pixt, x);
-      y = PLIST(pixt, y);
-      val = PLISTPIX(pixt, value);
-      cval = PLISTPIX(pixt, cdvalue);
-      if (peak < val)
-	{
-	  peak = val;
-	  xpeak = x;
-	  ypeak = y;
-	}
-      if (cpeak < cval)
-	{
-	  cpeak = cval;
-	  xcpeak = x;
-	  ycpeak = y;
-	}
-      rv += cval;
-      if (xmin > x)
-	xmin = x;
-      if (xmax < x)
-	xmax = x;
-      if (ymin > y)
-	ymin = y;
-      if (ymax < y)
-	ymax = y;
-      fdnpix++;
+  for (pixt=pixel+obj->firstpix; pixt>=pixel; pixt=pixel+PLIST(pixt,nextpix)) {
+    // printf("\npixt=%d, ", pixt);
+    // printf("nextpix=%d, ", PLIST(pixt, nextpix));
+    // printf("x=%d, y=%d, ", PLIST(pixt,x), PLIST(pixt,y));
+    // sleep(1);
+    x = PLIST(pixt, x);
+    y = PLIST(pixt, y);
+    val = PLISTPIX(pixt, value);
+    cval = PLISTPIX(pixt, cdvalue);
+    if (peak < val) {
+      peak = val;
+      xpeak = x;
+      ypeak = y;
     }
+    if (cpeak < cval) {
+      cpeak = cval;
+      xcpeak = x;
+      ycpeak = y;
+    }
+    rv += cval;
+    if (xmin > x)
+	    xmin = x;
+    if (xmax < x)
+	    xmax = x;
+    if (ymin > y)
+	    ymin = y;
+    if (ymax < y)
+    	ymax = y;
+    fdnpix++;
+  }
 
   obj->fdnpix = (LONG)fdnpix;
   obj->fdflux = (float)rv;
@@ -180,7 +181,11 @@ void  analyse(int no, objliststruct *objlist, int robust, double gain)
                 errx2, erry2, errxy, cvar, cvarsum;
   int		x, y, xmin, ymin, area2, dnpix;
 
+  // printf("Beginning preanalyse");
+  // fflush(stdout);
   preanalyse(no, objlist);
+  // printf("Finished preanalyse");
+  // fflush(stdout);
 
   dnpix = 0;
   mx = my = tv = 0.0;
@@ -196,13 +201,15 @@ void  analyse(int no, objliststruct *objlist, int robust, double gain)
   xmin = obj->xmin;
   ymin = obj->ymin;
 
-  printf("\n\n%d, ", obj->firstpix);
-  printf("%d, ", obj->lastpix);
-  printf("%s, ", pixt=pixel+obj->lastpix);
-  printf("%s\n\n", pixt=pixel+obj->firstpix);
+  // printf("\n\n%d, ", obj->firstpix);
+  // printf("%d, ", obj->lastpix);
+  // printf("%s, ", pixt=pixel+obj->lastpix);
+  // printf("%s\n\n", pixt=pixel+obj->firstpix);
   for (pixt=pixel+obj->firstpix; pixt>=pixel; pixt=pixel+PLIST(pixt,nextpix))
     {
-      printf("%d, ", PLIST(pixt, nextpix));
+      // printf("\npixt=%d, ", pixt);
+      // printf("nextpix=%d, ", PLIST(pixt, nextpix));
+      // printf("x=%d, y=%d, ", PLIST(pixt,x), PLIST(pixt,y));
       x = PLIST(pixt,x)-xmin;  /* avoid roundoff errors on big images */
       y = PLIST(pixt,y)-ymin;  /* avoid roundoff errors on big images */
       cval = PLISTPIX(pixt, cdvalue);
@@ -465,6 +472,9 @@ void singleobjanalyse(int no, idinfostruct *objinfo, objliststruct *objlist, int
   for (it=0; it<objinfo->pixnb; it++) {
     pixt = pixel+objinfo->pixptr[it];
     // printf("%d, ", PLIST(pixt, nextpix));
+    printf("\npixt=%d, ", pixt);
+    printf("nextpix=%d, ", PLIST(pixt, nextpix));
+    printf("x=%d, y=%d, ", PLIST(pixt,x), PLIST(pixt,y));
     x = PLIST(pixt,x)-xmin;  /* avoid roundoff errors on big images */
     y = PLIST(pixt,y)-ymin;  /* avoid roundoff errors on big images */
     cval = PLISTPIX(pixt, cdvalue);

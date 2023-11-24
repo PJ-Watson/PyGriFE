@@ -52,6 +52,8 @@ size_t sep_get_extract_pixstack() { return extract_pixstack; }
 int sortit(infostruct *info, objliststruct *objlist, int minarea,
            objliststruct *finalobjlist, int deblend_nthresh,
            double deblend_mincont, double gain, deblendctx *deblendctx);
+int segsortit(infostruct *info, objliststruct *objlist, 
+           objliststruct *finalobjlist, double gain);
 void plistinit(int hasconv, int hasvar);
 void clean(objliststruct *objlist, double clean_param, int *survives);
 int convert_to_catalog(objliststruct *objlist, const int *survives,
@@ -170,7 +172,8 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   size_t mem_pixstack;
   int nposize, oldnposize;
   int w, h;
-  int co, i, j, luflag, pstop, xl, xl2, yl, cn, ididx, numids;
+  int co, i, j, luflag, pstop, xl, xl2, yl, cn, ididx, numids, totnpix;
+  long prevpix;
   int stacksize, convn, status;
   int bufh;
   int isvarthresh, isvarnoise;
@@ -213,62 +216,81 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   sum = 0.0;
   w = image->w;
   h = image->h;
-  numids = image->numids;
+  numids = (image->numids) ? image->numids : 1;
+  // printf("Numids: %d", numids);
   // segids = image->segids;
   // idcounts = image->idcounts;
+  prevpix = 0;
   isvarthresh = 0;
   relthresh = 0.0;
   pixvar = 0.0;
   pixsig = 0.0;
   isvarnoise = 0;
-  idinfostruct idinfo[numids];
+  // idinfostruct idinfo[numids];
+  infostruct idinfo[numids];
+
+  // // printf("Here");
 
   // int seg1d[w*h];
   // if (image->segmap) {
   //   for (i=0; i < h; i++) {
   //     for (j=0; j < w; j++) {
   //       // seg1d[w*i+j] = image->segmap[]
-  //       printf("%s,", image->segmap+w*i+j);
+  //       // printf("%s,", image->segmap+w*i+j);
   //     }
   //   }
   // }
 
-  for (i=numids-5; i<numids; i++) {
-    printf("Iterator=%d, segid=%d, idcounts=%d.\n", i, image->segids[i], image->idcounts[i]);
-  };
-  // goto exit;
+  // for (i=numids-5; i<numids; i++) {
+  //   // printf("Iterator=%d, segid=%d, idcounts=%d.\n", i, image->segids[i], image->idcounts[i]);
+  // };
+  // // goto exit;
 
   // idinfostruct *idinfo;
-  printf("\nInfo:");
-  // printf("%zu", numids);
-  printf("%d; ", numids);
-  printf("%d", image->segids[20]);  
-  for (i = 4040; i < numids; i++) {
-  //   // update(&info[i], initinfo)
-  //   // &info[i] = initinfo;
-    printf("Current iteration: %d, ", i);
-    // printf("id=%d.", *(image->segids+i));
-    printf("id=%d.", image->segids[i]);
-    printf("counts=%d.\n", *(image->idcounts+i));
-  }
-  for (i = 4040; i < numids; i++) {
-  //   // update(&info[i], initinfo)
-  //   // &info[i] = initinfo;
-    printf("Current iteration: %d, ", i);
-    // printf("id=%d.", *(image->segids+i));
-    printf("id=%d.", image->segids[i]);
-    printf("counts=%d.\n", *(image->idcounts+i));
-  }
-  // printf("%d", image->numids);
-  printf("\n");
+  // printf("\nInfo:");
+  // // printf("%zu", numids);
+  // printf("%d; ", numids);
+  // // printf("%d", image->segids[20]);  
+  // for (i = 4040; i < numids; i++) {
+  // //   // update(&info[i], initinfo)
+  // //   // &info[i] = initinfo;
+  //   // printf("Current iteration: %d, ", i);
+  //   // // printf("id=%d.", *(image->segids+i));
+  //   // printf("id=%d.", image->segids[i]);
+  //   // printf("counts=%d.\n", *(image->idcounts+i));
+  // }
+  // for (i = 4040; i < numids; i++) {
+  // //   // update(&info[i], initinfo)
+  // //   // &info[i] = initinfo;
+  //   // printf("Current iteration: %d, ", i);
+  //   // // printf("id=%d.", *(image->segids+i));
+  //   // printf("id=%d.", image->segids[i]);
+  //   // printf("counts=%d.\n", *(image->idcounts+i));
+  // }
+  // // // printf("%d", image->numids);
+  // // printf("\n");
 
   // idinfostruct *idinfo;
 
   memset(&deblendctx, 0, sizeof(deblendctx));
 
-  printf("Initial dimensions in sep_extract: %d, %d\n", w, h);
+  // printf("Initial dimensions in sep_extract: %d, %d\n", w, h);
 
   mem_pixstack = sep_get_extract_pixstack();
+
+  if (image->segmap) {
+    // // printf("mem_pixstack=%zu, ", mem_pixstack);
+    totnpix=0;
+    for (i=0; i<numids; i++) {
+      totnpix += image->idcounts[i];
+    }
+    // printf("totnpix=%d, ", totnpix);
+    fflush(stdout);
+    if (totnpix>mem_pixstack) {
+      goto exit;
+    }
+    mem_pixstack = totnpix + 1;
+  }
 
   /* seed the random number generator consistently on each call to get
    * consistent results. rand_r() is used in deblending. */
@@ -317,11 +339,15 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
 
   /*Allocate memory for buffers */
   stacksize = w + 1;
-  // if (image->segmap) {
+  if (image->segmap) {
+    QMALLOC(info, infostruct, numids, status);
+  } else {
+    QMALLOC(info, infostruct, stacksize, status);
+  }
   //   QMALLOC(idinfo, idinfostruct, numids, status);
   // } else {
   // if (!image->segmap) {
-  QMALLOC(info, infostruct, stacksize, status);
+  // QMALLOC(info, infostruct, stacksize, status);
   QCALLOC(store, infostruct, stacksize, status);
   // }
   QMALLOC(marker, char, stacksize, status);
@@ -355,34 +381,34 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
       goto exit;
   }
   if (image->segmap) {
-    printf("%s\n", "Segmap exists");
+    // printf("%s\n", "Segmap exists");
     status = arraybuffer_init(&sbuf, image->segmap, image->sdtype, w, h,
                               stacksize, bufh);
                     
     // int maxnobj;
     // maxnobj = image->smax;
-    printf("Max nobj: %d\n", numids);
+    // printf("Max nobj: %d\n", numids);
 
     // for (yl = 0; yl < h; yl++) {
     //   for (xl = 0; xl < w; xl++) {
     //     // if (&image->segmap[xl,yl]>maxnobj) {
-    //       printf("%c", &image->segmap[xl,yl]);
+    //       // printf("%c", &image->segmap[xl,yl]);
     //     // }
     //   }
     // }
     if (status != RETURN_OK)
       goto exit;
   }
-  // printf("PIXNB %d\n", info[0].pixnb);
+  // // printf("PIXNB %d\n", info[0].pixnb);
 
   // char cwd[100];
   // if (getcwd(cwd, sizeof(cwd)) != NULL) {
-  //     printf("Current working dir: %s\n", cwd);
+  //     // printf("Current working dir: %s\n", cwd);
   // } else {
-  //   printf("%s", "Why?");
+  //   // printf("%s", "Why?");
   // };
 
-  printf("sbuf type: %d", image->sdtype);
+  // printf("sbuf type: %d", image->sdtype);
 
   // FILE *fp;
   // fp = fopen("info.txt", "a");
@@ -399,44 +425,44 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   initinfo.flag = 0;
   initinfo.firstpix = initinfo.lastpix = -1;
 
-  printf("Succesful?");
+  // printf("Succesful?");
 
 
-  for (i = 4040; i < numids; i++) {
-  //   // update(&info[i], initinfo)
-  //   // &info[i] = initinfo;
-    printf("Current iteration: %d, ", i);
-    // printf("id=%d.", *(image->segids+i));
-    printf("id=%d.", image->segids[i]);
-    printf("counts=%d.\n", *(image->idcounts+i));
-  }
+  // for (i = 0; i < numids; i++) {
+  // //   // update(&info[i], initinfo)
+  // //   // &info[i] = initinfo;
+  //   // printf("Current iteration: %d, ", i);
+  //   // // printf("id=%d.", *(image->segids+i));
+  //   // printf("id=%d.", image->segids[i]);
+  //   // printf("counts=%d.\n", *(image->idcounts+i));
+  // }
 
-  printf("Pass 1");
+  // printf("Pass 1");
 
   // if (image->segmap) {
   //   for (i = 0; i < 500; i++) {
-  //     printf("Current iteration: %d, ", i);
-  //     printf("id=%d.", *(image->segids+i));
-  //     printf("counts=%d.\n", *(image->idcounts+i));
+  //     // printf("Current iteration: %d, ", i);
+  //     // printf("id=%d.", *(image->segids+i));
+  //     // printf("counts=%d.\n", *(image->idcounts+i));
   //   }
   // }
-  // printf("Pass 2");
+  // // printf("Pass 2");
   // goto exit;
 
   // if (image->segmap) {
   //   for (i = 0; i < numids; i++) {
-  //     printf("counts=%d.\n", idcounts[i]);
+  //     // printf("counts=%d.\n", idcounts[i]);
   //   }
   // }
 
-  idinfostruct tmpinfo;
+  // idinfostruct tmpinfo;
   if (image->segmap) {
     sscan = sbuf.midline;
     // CHECK THIS!!
-    printf("Number of ids at this loc: %d.\n", numids);
-    // printf("flag %d", tmpinfo.flag);
-    // printf("pixnb %d", tmpinfo.pixnb);
-    // // printf("%d", tmpinfo.flag);
+    // printf("Number of ids at this loc: %d.\n", numids);
+    // // printf("flag %d", tmpinfo.flag);
+    // // printf("pixnb %d", tmpinfo.pixnb);
+    // // // printf("%d", tmpinfo.flag);
     // tmpinfo.pixnb = 0;
     // tmpinfo.flag = 0;
     // LONG* tmppointer = (LONG*)malloc(idcounts[0] * sizeof(LONG));
@@ -444,54 +470,57 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
     // idinfo[0].flag = 0;
     // // idinfo[0].pixptr = (LONG*)malloc(sizeof(LONG)*idcounts[0]);
     // QMALLOC(idinfo[0].pixptr, LONG, idcounts[0], status); /* This was previously almost working */
-    printf("WOrked here?");
-    printf("Any luck?");
+    // printf("WOrked here?");
+    // printf("Any luck?");
     for (i = 0; i < numids; i++) {
       // tmpinfo.pixnb = 0;
       // tmpinfo.flag = 0;
     //   // update(&info[i], initinfo)
     //   // &info[i] = initinfo;
-    //   // printf("Current iteration: %d, ", i);
-      // printf("id=%d.", segids[i]);
-      // printf("counts=%d.\n", idcounts[i]);
+    //   // // printf("Current iteration: %d, ", i);
+      // // printf("id=%d.", segids[i]);
+      // // printf("counts=%d.\n", idcounts[i]);
     //   // int ididx=*idcounts+i;
       idinfo[i].pixnb = 0;
       idinfo[i].flag = 0;
+      idinfo[i].firstpix = info[i].lastpix = -1;
+      // info[i].lastpix = 0;
     //   // (idinfo[i].flag);
     //   // // QCALLOC(idinfo[i].pixptr, int, 1, status)
-    //   // // printf("%d, ", idcounts[i]);
-    //   // // printf("pixels=%d.\n", idinfo[i].pixnb);
+    //   // // // printf("%d, ", idcounts[i]);
+    //   // // // printf("pixels=%d.\n", idinfo[i].pixnb);
     //   // // idinfo[i].pixptr = malloc(idcounts[i]*sizeof(LONG));
     //   // QMALLOC(idinfo[i].pixptr, LONG, idcounts[i], status); /* This was previously almost working */
     //   // idinfo[i].pixptr = realloc(idinfo[i].pixptr, sizeof(LONG)*idcounts[i]);
-      idinfo[i].pixptr = (LONG*)malloc(*(image->idcounts+i) * sizeof(LONG));
+      // idinfo[i].pixptr = (long*)malloc(*(image->idcounts+i) * sizeof(long));
     //   //  * (int)idinfo[ididx].pixnb);
     //   // print ()
-    //   // printf("id=%d.", segids[i]);
-    //   // printf("counts=%d.\n", idcounts[i]);
+    //   // // printf("id=%d.", segids[i]);
+    //   // // printf("counts=%d.\n", idcounts[i]);
     }
-    printf("Succesfully allocated memory.");
+    // printf("Succesfully allocated memory.");
   }
-
+  // 30000000
+  // 4162925
   // if (image->segmap) {
   //   for (i = 0; i < 500; i++) {
-  //     printf("Current iteration: %d, ", i);
-  //     printf("id=%d\n", *(image->segids+i));
-  //     printf("pixnb: %d, ", idinfo[i].pixnb);
-  //     printf("flag: %d.\n", idinfo[i].flag);
+  //     // printf("Current iteration: %d, ", i);
+  //     // printf("id=%d\n", *(image->segids+i));
+  //     // printf("pixnb: %d, ", idinfo[i].pixnb);
+  //     // printf("flag: %d.\n", idinfo[i].flag);
   //   }
   // }
-  if (image->segmap) {
-    for (i = 4040; i < numids; i++) {
-      printf("Current iteration: %d, ", i);
-      printf("id=%d.", *(image->segids+i));
-      printf("counts=%d.\n", *(image->idcounts+i));
-    }
-  }
+  // if (image->segmap) {
+  //   for (i = 0; i < numids; i++) {
+  //     // printf("Current iteration: %d, ", i);
+  //     // printf("id=%d.", *(image->segids+i));
+  //     // printf("counts=%d.\n", *(image->idcounts+i));
+  //   }
+  // }
 
   // if (image->segmap)
     
-  printf("Initialised to here.");
+  // printf("Initialised to here.");
 
   for (xl = 0; xl < stacksize; xl++) {
     marker[xl] = 0;
@@ -520,14 +549,17 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
     goto exit;
   }
 
-  printf("Allocating pixel memory.");
+  // printf("Allocating pixel memory.");
 
   /*----- at the beginning, "free" object fills the whole pixel list */
   freeinfo.firstpix = 0;
   freeinfo.lastpix = nposize - plistsize;
   pixt = pixel;
-  for (i = plistsize; i < nposize; i += plistsize, pixt += plistsize)
+  // printf("\nnposize=%d, mem_pixstack=%d, plistsize=%d\n", nposize, mem_pixstack, plistsize);
+  for (i = plistsize; i < nposize; i += plistsize, pixt += plistsize) {
     PLIST(pixt, nextpix) = i;
+    // printf("%d, ", i);
+  }
   PLIST(pixt, nextpix) = -1;
 
   /* can only use a matched filter when convolving and when there is a noise
@@ -535,7 +567,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   if (!(conv && isvarnoise))
     filter_type = SEP_FILTER_CONV;
 
-  printf("Allocating conv memory.");
+  // printf("Allocating conv memory.");
 
   if (conv) {
     /* allocate memory for convolved buffers */
@@ -554,7 +586,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
       convnorm[i] = conv[i] / sum;
   }
 
-  printf("Beginning loop.");
+  // printf("Beginning loop.");
 
   /*----- MAIN LOOP ------ */
   for (yl = 0; yl <= h; yl++) {
@@ -637,132 +669,91 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
          * if filter_type is SEP_FILTER_MATCHED */
         thresh = relthresh * pixsig;
       }
-
-      // printf("%d ", (sscan[xl]>0));
-
       /* luflag: is pixel above thresh (Y/N)? */
+      /* First check if segmap exists */
       if (image->segmap) {
-        // if (filter_type == SEP_FILTER_MATCHED) {
-        //   luflag = ((xl != w) && (sscan[xl] > 0)) ? 1 : 0;
-        // } else {
-        //   luflag = (sscan[xl] > 0) ? 1 : 0;
-        // }
-        // luflag = (sscan[xl] > 0) ? 1 : 0;
         if (sscan[xl]>0) {
-          // printf("%d",(int)sscan[xl]);
-
           if (xl == 0 || xl == w - 1)
             curpixinfo.flag |= SEP_OBJ_TRUNC;
 
-          pixt = pixel + (cn = freeinfo.firstpix);
-          freeinfo.firstpix = PLIST(pixt, nextpix);
-          // printf("fp: %d, ", freeinfo.firstpix);
-          curpixinfo.lastpix = curpixinfo.firstpix = cn;
-
-          PLIST(pixt, nextpix) = -1;
-          PLIST(pixt, x) = xl;
-          PLIST(pixt, y) = yl;
-          PLIST(pixt, value) = scan[xl];
-          if (PLISTEXIST(cdvalue))
-            PLISTPIX(pixt, cdvalue) = cdnewsymbol;
-          if (PLISTEXIST(var))
-            PLISTPIX(pixt, var) = pixvar;
-          if (PLISTEXIST(thresh))
-            PLISTPIX(pixt, thresh) = thresh;
-
-          // printf("%f", thresh);
-
-          // int it;
+          prevpix = 0;
           for (ididx=0; ididx<numids; ididx++) {
-            // printf("Iterator: %d, ", it);
-            // printf("ID: %d .  ", segids[it]);
             if (image->segids[ididx]==(int)sscan[xl]) {
-              // printf("Broken the loop, %d=%d", segids[it], (int)sscan[xl]);
-              // ididx = it;
+              // printf("\nx=%d, y=%d", xl, yl);
+              // printf("\nCurrent prevpix=%ld, ", prevpix);
+              prevpix += idinfo[ididx].pixnb;
+              // printf("new prevpix: %ld, ", prevpix);
+              pixt = pixel + prevpix*plistsize;
+              // printf("found pixt, ");
+
+              PLIST(pixt, x) = xl;
+              PLIST(pixt, y) = yl;
+              PLIST(pixt, value) = scan[xl];
+              if (PLISTEXIST(cdvalue))
+                PLISTPIX(pixt, cdvalue) = cdnewsymbol;
+              if (PLISTEXIST(var))
+                PLISTPIX(pixt, var) = pixvar;
+              if (PLISTEXIST(thresh))
+                PLISTPIX(pixt, thresh) = thresh;
+              // printf("\nnextpix=%d", PLIST(pixt, nextpix));
+
+              // printf("Finished plist edits");
+              
               if (idinfo[ididx].pixnb == 0) {
-                idinfo[ididx].pixptr[0] = cn;
-                // start[(int)sscan[xl]] = xl;
-                // info[ididx].firstpix = xl;
-                // info[ididx].lastpix = xl;
-                // info[(int)sscan[xl]] = initinfo;
+                // printf("\nFirst pixel, ididx=%d, ", ididx);
+                fflush(stdout);
+                idinfo[ididx].firstpix = prevpix*plistsize;
                 idinfo[ididx].pixnb = 1;
-                // printf("Object %d, firstpix: %d",(int)sscan[xl],info->firstpix);
-                // printf("Object %d, flag: %d",(int)sscan[xl],info->flag);
-                // printf("Object %d, lastpix: %d",(int)sscan[xl],info->lastpix);
-                // printf("Object %d, pixnb: %d",(int)sscan[xl],info->pixnb);
-                // printf("%f", pixel)
-              } else {
-                // info[(int)sscan[xl]].lastpix = xl;
-                // info[(int)sscan[xl]].pixnb++;
-                // printf("Current size: %d.\n", idinfo[ididx].pixnb);
-                idinfo[ididx].pixptr[idinfo[ididx].pixnb] = cn;
+                // printf("pixnb=%ld, ", idinfo[ididx].pixnb);
+                fflush(stdout);
+              } else if (idinfo[ididx].pixnb == image->idcounts[ididx]-1) {
+                // printf("\nLast pixel, ididx=%d, ", ididx);
+                fflush(stdout);
                 idinfo[ididx].pixnb++;
-                // printf("Current size: %d.\n", idinfo[ididx].pixnb);
-                // idinfo[ididx].pixptr = realloc(idinfo[ididx].pixptr, sizeof(LONG) * (int)idinfo[ididx].pixnb);
-                
-                // update(&info[ididx], &curpixinfo, pixel);
-                // printf("%s, ", pixel);
-                // printf("%d, ", xl);
-                // printf("%d, ", yl);
-                // printf("%f, ", cdnewsymbol);
+                idinfo[ididx].lastpix = prevpix*plistsize;
+                PLIST(pixt, nextpix) = -1;
+                // printf("pixnb=%ld, ", idinfo[ididx].pixnb);
+                fflush(stdout);
+              } else {
+                // printf("\nAdding pixel, ididx=%d, ", ididx);
+                fflush(stdout);
+                // idinfo[ididx].pixptr[idinfo[ididx].pixnb] = prevpix;
+                idinfo[ididx].pixnb++;
+                // printf("pixnb=%ld, ", idinfo[ididx].pixnb);
+                fflush(stdout);
               };
               break;
+            } else {
+              prevpix += image->idcounts[ididx];
             }
           }
-          // printf("%d", ididx);
 
-          // idinfotmp = *idinfo[ididx];
-          // printf ("%d\n", start[(int)sscan[xl]]);
-          // printf ("Current firstpix: %d ;", info[(int)sscan[xl]].firstpix);
+          // pixt = pixel + (cn = freeinfo.firstpix);
+          // freeinfo.firstpix = PLIST(pixt, nextpix);
+          // // // printf("fp: %d, ", freeinfo.firstpix);
+          // curpixinfo.lastpix = curpixinfo.firstpix = cn;
 
-          // printf("Object %d, firstpix: %d, ",(int)sscan[xl],info[(int)sscan[xl]].firstpix);
-          // // printf("Object %d, flag: %d, ",(int)sscan[xl],info[(int)sscan[xl]].flag);
-          // printf("lastpix: %d, ",info[(int)sscan[xl]].lastpix);
-          // printf("pixnb: %d, ", info[(int)sscan[xl]].pixnb);
-          // printf("Current id %d, position %d, count %d.\n", segids[ididx], ididx, info[ididx].pixnb);
           
-        // printf("%d %d %d\n", xl, yl, 1);
-        // fprintf(fp, "%d %d %d\n", xl, yl, 1);
-        // fflush(fp);
-
-          // if (cs != OBJECT) {
-          //   cs = OBJECT;
-          //   if (ps == OBJECT) {
-          //     if (start[co] == UNKNOWN) {
-          //       marker[xl] = 'S';
-          //       start[co] = xl;
-          //     } else
-          //       marker[xl] = 's';
-          //   } else {
-          //     psstack[pstop++] = ps;
-          //     marker[xl] = 'S';
-          //     start[++co] = xl;
-          //     ps = COMPLETE;
-          //     info[co] = initinfo;
-          //   }
-          // }
+          
+          
 
         }
       } else {
-      //   printf("No segmap here.");
-        // printf("%d,", xl);
-      // }
-      // if {
-      // if (1==1) {
+
         if (filter_type == SEP_FILTER_MATCHED) {
           luflag = ((xl != w) && (sigscan[xl] > relthresh)) ? 1 : 0;
         } else {
           luflag = cdnewsymbol > thresh ? 1 : 0;
         }
 
-        // printf("Flag: %d", luflag);
+        // printf("\n\nx=%d, y=%d, luflag=%d, newmarker=%c, ", xl, yl, luflag, newmarker);
+        // printf("cs=%d, ", cs);
 
-
-        // printf("%d %d %d\n", xl, yl, luflag);
-        // fprintf(fp, "%d %d %d\n", xl, yl, luflag);
-        // fflush(fp);
+        // printf("pstop=%d, psstack[pstop]=%d", pstop, psstack[pstop]);
 
         if (luflag) {
+
+
           /* flag the current object if we're near the image bounds */
           if (xl == 0 || xl == w - 1)
             curpixinfo.flag |= SEP_OBJ_TRUNC;
@@ -771,24 +762,24 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
           /* and increment the "first free pixel" */
           pixt = pixel + (cn = freeinfo.firstpix);        /* pixt = pixel[cn=freeinfo.firstpix] */
           freeinfo.firstpix = PLIST(pixt, nextpix);       /* first freepix is nextpix */
-          // printf("fp: %d, ", freeinfo.firstpix);
+          // // printf("fp: %d, ", freeinfo.firstpix);
           curpixinfo.lastpix = curpixinfo.firstpix = cn; 
 
-          // fprintf(fp, "%d %d %d\n", xl, yl, freeinfo.firstpix);
+          // f// printf(fp, "%d %d %d\n", xl, yl, freeinfo.firstpix);
           // fflush(fp);
 
           /* set values for the new pixel */
           PLIST(pixt, nextpix) = -1;                /* For pixt pointer to PLIST, set nextpix to -1  */
           PLIST(pixt, x) = xl;                      /* " , set x to xl */
           PLIST(pixt, y) = yl;                      /* " , set y to yl */
-          PLIST(pixt, value) = scan[xl];            /* " , set value to scan[xl] */
+          PLIST(pixt, value) = scan[xl];            /* " , set value to scan[xl], i.e. unconvolved value */
           if (PLISTEXIST(cdvalue))
-            PLISTPIX(pixt, cdvalue) = cdnewsymbol;
+            PLISTPIX(pixt, cdvalue) = cdnewsymbol;  /* convolved data */
           if (PLISTEXIST(var))
-            PLISTPIX(pixt, var) = pixvar;
+            PLISTPIX(pixt, var) = pixvar;           /* variance */
           if (PLISTEXIST(thresh))
-            PLISTPIX(pixt, thresh) = thresh;
-          // printf("%d%d\n", xl, yl);
+            PLISTPIX(pixt, thresh) = thresh;        /* threshold */
+          // // printf("%d%d\n", xl, yl);
 
           /* Check if we have run out of free pixels in objlist.plist */
           if (freeinfo.firstpix == freeinfo.lastpix) {
@@ -836,26 +827,38 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
           }
           /*------------------------------------------------------------*/
 
+          // printf("\n\tOld vars: ps=%d, co=%d, start[co]=%d, marker[xl]=%c.", ps, co, start[co], marker[xl]);
+          // printf("\n\tChecking if current status is already object.");
+
           /* if the current status on this line is not already OBJECT... */
           /* start segment */
-          if (cs != OBJECT) {
+          if (cs != OBJECT) {           /* cs is the current status */
             cs = OBJECT;
+            // printf("\n\tChanged cs to 3 (OBJECT). ");
             if (ps == OBJECT) {
+              // printf("ps==OBJECT, ");
               if (start[co] == UNKNOWN) {
+                // printf("start[co]==UNKNOWN, ");
                 marker[xl] = 'S';
-                start[co] = xl;
-              } else
+                start[co] = xl;         /* start[co] is the x location of the start of the current object. */
+              } else {
+                // printf("start[co]!=UNKNOWN, ");
                 marker[xl] = 's';
+              }
             } else {
+              // printf("ps!=OBJECT, ");
               psstack[pstop++] = ps;
               marker[xl] = 'S';
               start[++co] = xl;
               ps = COMPLETE;
               info[co] = initinfo;
             }
+            
           }
 
         } /* closes if pixel above threshold */
+
+        // printf("\n\tNew vars: ps=%d, co=%d, start[co]=%d, marker[xl]=%c.", ps, co, start[co], marker[xl]);
 
         /* process new marker ---------------------------------------------*/
         /* newmarker is marker[ ] at this pixel position before we got to
@@ -896,10 +899,10 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
                 if ((int)info[co].pixnb >= minarea) {
                   /* update threshold before object is processed */
                   objlist.thresh = thresh;
-                  // printf("\nBefore sortit.");
-                  // printf("Objlist.nobj: %d\n", objlist.nobj);
-                  // printf("Objlist.npix: %d\n", objlist.npix);
-                  // printf("Objlist.thresh: %f\n", objlist.thresh);
+                  // // printf("\nBefore sortit.");
+                  // // printf("Objlist.nobj: %d\n", objlist.nobj);
+                  // // printf("Objlist.npix: %d\n", objlist.npix);
+                  // // printf("Objlist.thresh: %f\n", objlist.thresh);
 
                   status = sortit(&info[co], &objlist, minarea, finalobjlist,
                                   deblend_nthresh, deblend_cont, image->gain,
@@ -924,17 +927,23 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
 
         /* update the info or end segment */
         if (luflag) {
+          // printf("\n\tUpdating info[co] with curpixinfo.");
           update(&info[co], &curpixinfo, pixel);
         } else if (cs == OBJECT) {
+          // printf("\n\tCurrent pixel below threshold. cs==OBJECT. ");
           cs = NONOBJECT;
           if (ps != COMPLETE) {
+            // printf("ps!=COMPLETE. ");
             marker[xl] = 'f';
             end[co] = xl;
           } else {
+            // printf("ps==COMPLETE. ");
+            // printf("start[co]=%d, ", start[co]);
             ps = psstack[--pstop];
             marker[xl] = 'F';
             store[start[co]] = info[co];
             co--;
+            // printf("co=%d, ps=%c. Assigning 'F' to marker[xl].", co, ps);
           }
         }
       }
@@ -943,34 +952,37 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
 
   } /*---------------- End of the loop over the y's -----------------------*/
 
-  printf("%s", "Reached here.\n");
+  // printf("%s", "Reached here.\n");
   fflush(stdout);
-  // printf("\n\nObject %d, firstpix: %d",1878,info[1878].firstpix);
-  // printf("Object %d, flag: %d",1878,info[1878].flag);
-  // printf("Object %d, lastpix: %d",1878,info[1878].lastpix);
-  // printf("Object %d, pixnb: %d",1878,info[1878].pixnb);
-  // printf("\nObjlist.nobj: %d ", objlist.nobj);
-  // printf("\nObjlist.npix: %d ", objlist.npix);
-  // printf("\nObjlist.thresh: %f\n", objlist.thresh);
+  // // printf("\n\nObject %d, firstpix: %d",1878,info[1878].firstpix);
+  // // printf("Object %d, flag: %d",1878,info[1878].flag);
+  // // printf("Object %d, lastpix: %d",1878,info[1878].lastpix);
+  // // printf("Object %d, pixnb: %d",1878,info[1878].pixnb);
+  // // printf("\nObjlist.nobj: %d ", objlist.nobj);
+  // // printf("\nObjlist.npix: %d ", objlist.npix);
+  // // printf("\nObjlist.thresh: %f\n", objlist.thresh);
   // fclose(fp);
   // for (i = 0; i < objlist.nobj; i++) {
-  //   printf("Current iteration: %d, id=%d. ", i, segids[i]);
-  //   printf("firstpix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
+  //   // printf("Current iteration: %d, id=%d. ", i, segids[i]);
+  //   // printf("firstpix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
   // }
-  // printf("Fucking why.");
+  // // printf("Fucking why.");
   if (image->segmap) {
-    for (i = 2120; i < 2130; i++) {
-      // printf("Test %d", i);
-      printf("Current iteration: %d, id=%d, npix=%d.\n", i, image->segids[i], idinfo[i].pixnb);
-      // printf("npix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
+    for (i = 0; i < numids; i++) {
+      // // printf("Test %d", i);
+      // printf("Current iteration: %d, id=%d, npix=%ld, ", i, image->segids[i], idinfo[i].pixnb);
+      // printf("firstpix=%ld, lastpix=%ld.\n", idinfo[i].firstpix, idinfo[i].lastpix);
+      // // printf("npix: %d, lastpix: %d, flag: %d, pixnb:%d.\n", info[i].firstpix, info[i].lastpix, info[i].flag, info[i].pixnb);
       // if (i>2110 && i<2130) {
-        singleobjanalyse(i, &idinfo[i], &objlist, 0, image->gain);
+        // singleobjanalyse(i, &idinfo[i], &objlist, 0, image->gain);
+        // analyse(i, objliststruct *, 0, image->gain)
       // }
+      status = segsortit(&idinfo[i], &objlist, finalobjlist, image->gain);
     }
-    printf("I've tried so hard, and got this far.");
+    // printf("I've tried so hard, and got this far.");
     fflush(stdout);
     // return status;
-    goto exit;
+    // goto exit;
     // status = sortit(&info[1878], &objlist, minarea, finalobjlist,
     //                               deblend_nthresh, deblend_cont, image->gain,
     //                               &deblendctx);
@@ -991,6 +1003,9 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
     }
   }
 
+  // printf("About to convert catalogue.\n");
+  fflush(stdout);
+
   /* convert to output catalog */
   QCALLOC(cat, sep_catalog, 1, status);
   status = convert_to_catalog(finalobjlist, survives, cat, w, 1);
@@ -1005,15 +1020,15 @@ exit:
   }
   freedeblend(&deblendctx);
   free(pixel);
-  if (image->segmap) {
-    for (i=0; i<numids; i++) {
-      free(idinfo[i].pixptr);
-    };
-    // free(idinfo);
-  } else {
+  // if (image->segmap) {
+    // for (i=0; i<numids; i++) {
+    //   free(idinfo[i].pixptr);
+    // };
+    // free(&idinfo);
+  // } else {
     free(info);
     free(store);
-  }
+  // }
   free(marker);
   free(dummyscan);
   free(psstack);
@@ -1048,6 +1063,67 @@ exit:
   return status;
 }
 
+int segsortit(infostruct *info, objliststruct *objlist,
+           objliststruct *finalobjlist, double gain) {
+  objliststruct objlistout, *objlist2;
+  objstruct obj;
+  int i, status;
+
+  // printf("\n\n\n!!! Running sortit. !!!\n");
+  // // printf("Nobj: %d\n", objlist->nobj);
+  // // printf("Flag: %d\n", info->flag);
+  // // printf("pixnb: %d\n", info->pixnb);
+
+
+  // // printf("Object %d, firstpix: %d; ",0,info->firstpix);
+  // // printf("Object %d, flag: %d; ",0,info->flag);
+  // // printf("Object %d, lastpix: %d; ",0,info->lastpix);
+  // // printf("Object %d, pixnb: %d; \n",0,info->pixnb);
+
+  // int i_it; 
+  // for (i_it=0; i_it<3; i_it++) {
+  //   // printf("sizeof info %d pixnb, %d\n", i_it, info[i_it].pixnb);
+  // }
+
+  status = RETURN_OK;
+  objlistout.obj = NULL;
+  objlistout.plist = NULL;
+  objlistout.nobj = objlistout.npix = 0;
+
+  /*----- Allocate memory to store object data */
+  objlist->obj = &obj;
+  objlist->nobj = 1;
+
+  // printf("Allocated memory");
+  fflush(stdout);
+
+  memset(&obj, 0, (size_t)sizeof(objstruct));
+  objlist->npix = info->pixnb;
+  obj.firstpix = info->firstpix;
+  obj.lastpix = info->lastpix;
+  obj.flag = info->flag;
+  obj.thresh = objlist->thresh;
+  
+  // printf("Beginning analysis");
+  fflush(stdout);
+
+  analyse(0, objlist, 1, gain);
+
+  // printf("Finished analysis.\n");
+  fflush(stdout);
+
+  status = addobjdeep(0, objlist, finalobjlist);
+      // // printf("Addobjdeep status: %d", status);
+
+  if (status != RETURN_OK)
+    goto exit;
+
+exit:
+  free(objlistout.plist);
+  free(objlistout.obj);
+  return status;
+}
+
 /********************************* sortit ************************************/
 /*
 build the object structure.
@@ -1059,21 +1135,21 @@ int sortit(infostruct *info, objliststruct *objlist, int minarea,
   objstruct obj;
   int i, status;
 
-  printf("\nRunning sortit.\n");
-  printf("Nobj: %d\n", objlist->nobj);
-  printf("Flag: %d\n", info->flag);
-  printf("pixnb: %d\n", info->pixnb);
+  // printf("\n\n\n!!! Running sortit. !!!\n");
+  // // printf("Nobj: %d\n", objlist->nobj);
+  // // printf("Flag: %d\n", info->flag);
+  // // printf("pixnb: %d\n", info->pixnb);
 
 
-  printf("Object %d, firstpix: %d; ",0,info->firstpix);
-  printf("Object %d, flag: %d; ",0,info->flag);
-  printf("Object %d, lastpix: %d; ",0,info->lastpix);
-  printf("Object %d, pixnb: %d; \n",0,info->pixnb);
+  // // printf("Object %d, firstpix: %d; ",0,info->firstpix);
+  // // printf("Object %d, flag: %d; ",0,info->flag);
+  // // printf("Object %d, lastpix: %d; ",0,info->lastpix);
+  // // printf("Object %d, pixnb: %d; \n",0,info->pixnb);
 
-  int i_it; 
-  for (i_it=0; i_it<3; i_it++) {
-    printf("sizeof info %d pixnb, %d\n", i_it, info[i_it].pixnb);
-  }
+  // int i_it; 
+  // for (i_it=0; i_it<3; i_it++) {
+  //   // printf("sizeof info %d pixnb, %d\n", i_it, info[i_it].pixnb);
+  // }
 
   status = RETURN_OK;
   objlistout.obj = NULL;
@@ -1091,16 +1167,16 @@ int sortit(infostruct *info, objliststruct *objlist, int minarea,
   obj.flag = info->flag;
   obj.thresh = objlist->thresh;
 
-  printf("Memory set.\n");
+  // // printf("Memory set.\n");
 
   preanalyse(0, objlist);
 
-  printf("Pre-analysed.\n");
+  // // printf("Pre-analysed.\n");
 
   status = deblend(objlist, 0, &objlistout, deblend_nthresh, deblend_mincont,
                    minarea, deblendctx);
 
-  printf("Deblend status: %d", status);
+  // // printf("Deblend status: %d", status);
   if (status) {
     /* formerly, this wasn't a fatal error, so a flag was set for
      * the object and we continued. I'm leaving the flag-setting
@@ -1123,7 +1199,7 @@ int sortit(infostruct *info, objliststruct *objlist, int minarea,
 
     /* add the object to the final list */
     status = addobjdeep(i, objlist2, finalobjlist);
-    printf("Addobjdeep status: %d", status);
+    // // printf("Addobjdeep status: %d", status);
 
     if (status != RETURN_OK)
       goto exit;

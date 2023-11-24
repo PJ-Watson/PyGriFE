@@ -42,17 +42,17 @@ typedef	enum {COMPLETE, INCOMPLETE, NONOBJECT, OBJECT} pixstatus;
 /* Temporary object parameters during extraction */
 typedef struct structinfo
 {
-  LONG	pixnb;	    /* Number of pixels included */
-  LONG	firstpix;   /* Pointer to first pixel of pixlist */
-  LONG	lastpix;    /* Pointer to last pixel of pixlist */
+  long	pixnb;	    /* Number of pixels included */
+  long	firstpix;   /* Pointer to first pixel of pixlist */
+  long	lastpix;    /* Pointer to last pixel of pixlist */
   short	flag;	    /* Extraction flag */
 } infostruct;
 
 /* Temporary object parameters during extraction */
 typedef struct
 {
-  LONG	pixnb;	    /* Number of pixels included */
-  LONG	*pixptr;   /* Array of pointers into pixlist */
+  long	pixnb;	    /* Number of pixels included */
+  long	*pixptr;   /* Array of pointers into pixlist */
   short	flag;	    /* Extraction flag */
 } idinfostruct;
 

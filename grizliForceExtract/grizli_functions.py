@@ -285,6 +285,53 @@ class GrizliExtractor:
 
         # data_bkg = np.zeros()
 
+        # prep.SEP_DETECT_PARAMS['minarea'] = 1
+        # prep.SEP_DETECT_PARAMS['clean'] = False
+        # prep.SEP_DETECT_PARAMS['filter_kernel'] = None
+
+        # print (prep.SEP_DETECT_PARAMS)
+
+
+
+        # data_bkg = np.array(
+        #     # [
+        #     #     [0,0,0,1,0],
+        #     #     [0,0,0,1,0],
+        #     #     [0,1,0,1,0],
+        #     #     [1,1,0,0,0],
+        #     #     [0,1,0,0,0],
+        #     # ],
+        #     [
+        #         [0,1,1,1,0],
+        #         [0,0,1,1,0],
+        #         [0,0,0,1,0],
+        #         [0,1,0,1,0],
+        #         [0,1,0,0,0],
+        #     ],
+        #     dtype=float,
+        # )#.byteswap().newbyteorder()
+
+        # seg_img = np.array(
+        #     # [
+        #     #     [0,0,0,1,0],
+        #     #     [0,0,0,1,0],
+        #     #     [0,1,0,1,0],
+        #     #     [1,1,0,0,0],
+        #     #     [0,1,0,0,0],
+        #     # ],
+        #     [
+        #         [0,1,1,1,0],
+        #         [0,0,1,1,0],
+        #         [0,0,0,1,0],
+        #         [0,2,0,1,0],
+        #         [0,2,0,0,0],
+        #     ],
+        #     dtype=float,
+        # )#.byteswap().newbyteorder()
+
+        # err = np.full_like(data_bkg, 0.01, dtype=float)#.byteswap().newbyteorder()
+        # mask = np.zeros_like(data_bkg, dtype=float)#.byteswap().newbyteorder()
+
         sep_fns.set_extract_pixstack(int(3e7))
         sep_fns.set_sub_object_limit(4096)
         objects, seg = sep_fns.extract(
@@ -297,7 +344,20 @@ class GrizliExtractor:
             **prep.SEP_DETECT_PARAMS
         )
 
-        print (len(objects))
+        # print (len(objects))
+        print ("Objects", objects)
+        print (seg)
+
+        output_markers = np.array(
+            [
+                [" "," "," ","S","F"],
+                [" "," "," ","S","F"],
+                [" ","S","F","S","F"],
+                ["S"," ","F"," "," "],
+                [" ","S","F"," "," "],
+            ],
+            # dtype=float,
+        )#.byteswap().newbyteorder()
 
         # # from astropy.table import Table
         # # test_tab = Table.read("info.txt", format="ascii.no_header")
@@ -312,13 +372,15 @@ class GrizliExtractor:
         # #     except IndexError:
         # #         pass
 
-        # fig, ax = plt.subplots()
-        # # im = ax.imshow(test_array, origin="lower")
-        # # plt.colorbar(im)
-        # # plt.show()
-
-        # ax.imshow(seg)
+        fig, ax = plt.subplots()
+        seg = seg.astype(float)
+        seg[seg==0] = np.nan
+        # im = ax.imshow(test_array, origin="lower")
+        # plt.colorbar(im)
         # plt.show()
+        ax.set_facecolor("0.7")
+        ax.imshow(seg, cmap="plasma")
+        plt.show()
 
         # print (err[3000:3005, 3000:30005])
         # from astropy.convolution import convolve_fft as convolve
