@@ -148,13 +148,14 @@ SEP_API int sep_extract(const sep_image *image,
 
 
 
-/* set and get the size of the pixel stack used in extract() */
-SEP_API void sep_set_extract_pixstack(size_t val);
-SEP_API size_t sep_get_extract_pixstack(void);
 
 /* set and get the number of sub-objects limit when deblending in extract() */
 SEP_API void sep_set_sub_object_limit(int val);
 SEP_API int sep_get_sub_object_limit(void);
+
+/* set and get the size of the pixel stack used in extract() */
+SEP_API void sep_set_extract_pixstack(size_t val);
+SEP_API size_t sep_get_extract_pixstack(void);
 
 /* free memory associated with a catalog */
 SEP_API void sep_catalog_free(sep_catalog *catalog);

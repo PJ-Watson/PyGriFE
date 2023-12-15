@@ -10,8 +10,8 @@ from astropy import wcs
 import qimage2ndarray
 import numpy as np
 import time
-from .seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
-from .grizli_functions import GrizliExtractor
+from seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
+from grizli_extractor import GrizliExtractor
 import json
 
 class GrizliGUI(SegMapViewer):
@@ -61,9 +61,12 @@ class GrizliGUI(SegMapViewer):
 
         if self.ge is None:
             self.ge = GrizliExtractor(self.field_name, self.prep_dir, self.new_dir_path)
-        if not hasattr(self.ge, "grp"):
-            self.ge.load_contamination_maps()
-        self.ge.extract_spectra(self.selected_ids)
+        # if not hasattr(self.ge, "grp"):
+        #     self.ge.load_contamination_maps()
+        self.ge.load_seg_img(self.seg_data[::-1,:])
+        self.ge.regen_multiband_catalogue()
+        # self.ge.extract_sep()
+        # self.ge.extract_spectra(self.selected_ids)
 
 
 class GrizliFilesWindow(FilesWindow):
@@ -112,9 +115,3 @@ class GrizliFilesWindow(FilesWindow):
     def load_all(self):
         self.root.prep_dir = Path(self.prep_dir_line.text())
         super().load_all()
-    
-if __name__=="__main__":
-    app = QApplication(sys.argv)
-    window = GrizliGUI()
-    window.showMaximized()
-    app.exec()

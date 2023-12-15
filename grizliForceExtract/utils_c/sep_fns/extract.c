@@ -45,9 +45,13 @@ _Thread_local unsigned int randseed;
 static _Atomic size_t extract_pixstack = 300000;
 
 /* get and set pixstack */
-void sep_set_extract_pixstack(size_t val) { extract_pixstack = val; }
+void sep_set_extract_pixstack(size_t val) {
+  extract_pixstack = val; 
+}
 
-size_t sep_get_extract_pixstack() { return extract_pixstack; }
+size_t sep_get_extract_pixstack() { 
+  return extract_pixstack; 
+}
 
 int sortit(infostruct *info, objliststruct *objlist, int minarea,
            objliststruct *finalobjlist, int deblend_nthresh,
@@ -953,7 +957,7 @@ int sep_extract(const sep_image *image, float thresh, int thresh_type,
   } /*---------------- End of the loop over the y's -----------------------*/
 
   // printf("%s", "Reached here.\n");
-  fflush(stdout);
+  // fflush(stdout);
   // // printf("\n\nObject %d, firstpix: %d",1878,info[1878].firstpix);
   // // printf("Object %d, flag: %d",1878,info[1878].flag);
   // // printf("Object %d, lastpix: %d",1878,info[1878].lastpix);
@@ -1086,41 +1090,46 @@ int segsortit(infostruct *info, objliststruct *objlist,
   // }
 
   status = RETURN_OK;
-  objlistout.obj = NULL;
-  objlistout.plist = NULL;
-  objlistout.nobj = objlistout.npix = 0;
+  // objlistout.obj = NULL;
+  // objlistout.plist = NULL;
+  // objlistout.nobj = objlistout.npix = 0;
 
   /*----- Allocate memory to store object data */
   objlist->obj = &obj;
   objlist->nobj = 1;
 
   // printf("Allocated memory");
-  fflush(stdout);
+  // fflush(stdout);
 
   memset(&obj, 0, (size_t)sizeof(objstruct));
   objlist->npix = info->pixnb;
   obj.firstpix = info->firstpix;
   obj.lastpix = info->lastpix;
   obj.flag = info->flag;
-  obj.thresh = objlist->thresh;
+
+
+
+  obj.thresh = PLISTPIX(objlist->plist+info->lastpix, thresh);
   
   // printf("Beginning analysis");
-  fflush(stdout);
+  // printf("Threshold=%f",  PLISTPIX(objlist->plist+info->lastpix, thresh));
+  // // printf("lastpix")
+  // fflush(stdout);
 
   analyse(0, objlist, 1, gain);
 
   // printf("Finished analysis.\n");
-  fflush(stdout);
+  // fflush(stdout);
 
   status = addobjdeep(0, objlist, finalobjlist);
-      // // printf("Addobjdeep status: %d", status);
+  // printf("Addobjdeep status: %d", status);
 
   if (status != RETURN_OK)
     goto exit;
 
 exit:
-  free(objlistout.plist);
-  free(objlistout.obj);
+  // free(objlistout.plist);
+  // free(objlistout.obj);
   return status;
 }
 

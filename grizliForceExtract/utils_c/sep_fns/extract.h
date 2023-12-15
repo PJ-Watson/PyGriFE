@@ -145,9 +145,6 @@ int analysemthresh(int objnb, objliststruct *objlist, int minarea,
 void preanalyse(int, objliststruct *);
 void analyse(int, objliststruct *, int, double);
 
-void singleobjpreanalyse(int, idinfostruct *, objliststruct *);
-void singleobjanalyse(int, idinfostruct *, objliststruct *, int, double);
-
 typedef struct {
 	infostruct  *info, *store;
 	char	   *marker;

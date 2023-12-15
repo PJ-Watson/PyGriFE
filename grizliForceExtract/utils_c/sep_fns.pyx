@@ -506,7 +506,7 @@ def extract(np.ndarray data not None, float thresh, err=None, var=None,
 
         im.numids = len(segids)
 
-        print (f"Unique ids: {im.numids}.\n")
+        # print (f"Unique ids: {im.numids}.\n")
     else:
         _parse_arrays(data, err, var, mask, None, &im)
     im.maskthresh = maskthresh
