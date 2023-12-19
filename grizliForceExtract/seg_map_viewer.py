@@ -1,8 +1,7 @@
 import sys
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QThreadPool, QObject, QRunnable, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton, QFormLayout, QLineEdit
 from PyQt6.QtGui import QPalette, QColor, QImage, QPixmap, QPainter
-from QtImageViewer import QtImageViewer
 from pathlib import Path
 import astropy.io.fits as pf
 from astropy.visualization import (LogStretch, AsinhStretch, ManualInterval, SqrtStretch, LinearStretch)
@@ -10,10 +9,13 @@ from astropy import wcs
 import qimage2ndarray
 import numpy as np
 import time
+from qt_utils import QtImageViewer, Worker, WorkerSignals
 
 class SegMapViewer(QMainWindow):
     def __init__(self, filters=["F115W", "F150W", "F200W"]):
         super(SegMapViewer, self).__init__()
+
+        self.threadpool = QThreadPool()
 
         self.filters = filters
 
@@ -184,8 +186,9 @@ class SegMapViewer(QMainWindow):
             return
 
         x = int(pos.x())
-        y = int(self.seg_data.shape[0]-pos.y()-1)
-        seg_id = self.seg_data[y, x]
+        y = int(self.seg_data.shape[0]-pos.y()-1) if pos.y()!=-1 else -1
+        # print (pos.y(), self.seg_data.shape)
+        seg_id = self.seg_data[int(pos.y()), x]
 
         # shape = self.seg_data.shape()
         # print (shape)
@@ -214,16 +217,23 @@ class SegMapViewer(QMainWindow):
 
     def opacity_update(self, event=None):
         
+        print ("step 1")
         self.opacity = float(self.opacity_box.currentText().split("%")[0])/100
 
+        print ("step 2")
+
         if not hasattr(self, "img_array"):
+            print ("returning")
             return
 
         if self.invert_box.checkState() == Qt.CheckState.Checked:
-            self.img_array[:,:,-1] = np.clip(self.opacity*self.seg_mask+self.opacity_mask, a_min=0, a_max=1)*255
+            print ("checked")
+            self.img_array[:,:,-1] = (np.clip(self.opacity*self.seg_mask+self.opacity_mask, a_min=0, a_max=1)*255).astype('uint8')
         else:
-            self.img_array[:,:,-1] = np.clip(self.opacity*self.opacity_mask+self.seg_mask, a_min=0, a_max=1)*255
+            print ("unchecked")
+            self.img_array[:,:,-1] = (np.clip(self.opacity*self.opacity_mask+self.seg_mask, a_min=0, a_max=1)*255).astype('uint8')
 
+        print ("almost there")
         q_img = QImage(self.img_array, self.img_array.shape[1], self.img_array.shape[0], self.img_array.strides[0], QImage.Format.Format_RGBA8888)
         self.viewer.setImage(q_img)
 
@@ -237,23 +247,28 @@ class SegMapViewer(QMainWindow):
         q_img = QImage(self.img_array, self.img_array.shape[1], self.img_array.shape[0], self.img_array.strides[0], QImage.Format.Format_RGBA8888)
         self.viewer.setImage(q_img)
 
-    def load_image(self):
+    def load_image(self, progress_callback):
 
         t1 = time.time()
-        print ("Reading images...", end="\r")
+        # print ("Reading images...", end="\r")
+        progress_callback.emit("Reading images...")
         
         with pf.open(self.seg_img_path) as hdul_seg:
             self.seg_mask = (hdul_seg[0].data > 0).astype('uint8')[::-1, :]
             self.opacity_mask = 1 - self.seg_mask
             self.seg_data = hdul_seg[0].data[::-1,:]
-            self.seg_q = qimage2ndarray.array2qimage(np.stack(
+            self.seg_q = qimage2ndarray.array2qimage(
+                np.stack(
                     [
                         np.zeros_like(self.seg_mask), 
                         np.ones_like(self.seg_mask), 
                         np.zeros_like(self.seg_mask), 
                         self.seg_mask*0.5,
                     ],
-                    axis=-1), True)
+                    axis=-1,
+                ),
+                True,
+            )
 
             self.wcs = wcs.WCS(hdul_seg[0].header)
 
@@ -267,19 +282,28 @@ class SegMapViewer(QMainWindow):
                 with pf.open(filt_img_path) as hdul_sci:
                     self.data_array[:,:,i] = hdul_sci[0].data[::-1, :]
                 try:
-                    wht_path = filt_img_path.replace("sci", "wht")
+                    # print (filt_img_path)
+                    # wht_path = filt_img_path.replace("sci", "wht")
+                    wht_path = filt_img_path.with_name(
+                        filt_img_path.name.replace("sci", "wht")
+                    )
+                    # print (wht_path)
                     with pf.open(wht_path) as hdul_wht:
                         self.overlap_mask = self.overlap_mask | (hdul_wht[0].data[::-1, :] > 0)
                 except:
+                    print ("Weight file not found.")
                     pass
             except:
                 pass
 
-        self.opacity_mask[~self.overlap_mask] = 0
+        if np.sum(self.overlap_mask)!=0:
+            self.opacity_mask[~self.overlap_mask] = 0
         img_array = self.data_array.copy()
-        print ("Reading images... DONE")
+        # print ("Reading images... DONE", time.time()-t1)
+        progress_callback.emit("Reading images... DONE")
 
-        print ("Computing intervals...", end="\r")
+        # print ("Computing intervals...", end="\r")
+        progress_callback.emit("Computing intervals...")
         self.interval_dict = {}
         percentiles = []
         for interval in self.interval_keys:
@@ -293,9 +317,11 @@ class SegMapViewer(QMainWindow):
             self.interval_dict[k] = l
         
         self.interval = ManualInterval(self.interval_dict["99.8%"][0], self.interval_dict["99.8%"][1])
-        print ("Computing intervals... DONE")
+        # print ("Computing intervals... DONE", time.time()-t1)
+        progress_callback.emit("Computing intervals... DONE")
 
-        print ("Formatting image for display...", end="\r")
+        # print ("Formatting image for display...", end="\r")
+        progress_callback.emit("Formatting image for display...")
         img_array[:,:,:-1] = self.stretch(self.interval(img_array[:,:,:-1]))
         self.img_array = (img_array*255).astype('uint8')
 
@@ -307,11 +333,19 @@ class SegMapViewer(QMainWindow):
             self.img_array[:,:,-1] = np.clip(self.opacity*self.opacity_mask+self.seg_mask, a_min=0, a_max=1)*255
 
         self.q_img = QImage(self.img_array, self.img_array.shape[1], self.img_array.shape[0], self.img_array.strides[0], QImage.Format.Format_RGBA8888)
-        self.viewer.setImage(self.q_img)
-        self.viewer.setBackgroundBrush(QColor(120,120,120))
+        # self.viewer.setImage(self.q_img)
+        # self.viewer.setBackgroundBrush(QColor(120,120,120))
+        progress_callback.emit("Formatting image for display... DONE")
+        # print ("Formatting image for display... DONE", time.time()-t1)
+        # print (f"Completed in {(time.time()-t1):.2f}s")
+        progress_callback.emit(f"Completed in {(time.time()-t1):.2f}s")
 
-        print ("Formatting image for display... DONE")
-        print (f"Completed in {(time.time()-t1):.2f}s")
+        return self.q_img
+
+    def set_img(self, img):
+
+        self.viewer.setImage(img)
+        self.viewer.setBackgroundBrush(self.bkg_frm.bkg_col)
 
     def calc_interval_limits(self, percentiles):
         
@@ -434,10 +468,14 @@ class FilesWindow(QWidget):
         self.sub_layout.addRow("Red:", self.r_line)
         self.v_layout.addLayout(self.sub_layout)
 
-        load_all_button = QPushButton('Load Images', self)
-        load_all_button.clicked.connect(self.load_all)
+        self.load_all_button = QPushButton('Load Images', self)
+        self.load_all_button.clicked.connect(self.load_all)
         self.v_layout.addWidget(Separator())
-        self.v_layout.addWidget(load_all_button)
+        self.v_layout.addWidget(self.load_all_button)
+
+        self.progress_label = QLabel(f"Test", self)
+        self.v_layout.addWidget(self.progress_label)
+        self.progress_label.setHidden(True)
 
         self.setLayout(self.v_layout)
         self.setMinimumWidth(540)
@@ -473,18 +511,36 @@ class FilesWindow(QWidget):
                 print ("Could not find all filter images.")
 
     def load_all(self):
+        self.load_all_button.setEnabled(False)
+        self.progress_label.setHidden(False)
         self.root.seg_img_path = Path(self.seg_line.text())
         self.root.b_img_path = Path(self.b_line.text())
         self.root.g_img_path = Path(self.g_line.text())
         self.root.r_img_path = Path(self.r_line.text())
-        self.root.load_image()
+        # self.root.load_image()
+        worker = Worker(self.root.load_image)
+        worker.signals.progress.connect(self.progress_fn)
+        worker.signals.result.connect(self.root.set_img)
+        worker.signals.finished.connect(self.cleanup_load)
+        self.root.threadpool.start(worker)
+
+    def progress_fn(self, text):
+        self.progress_label.setText(text)
+
+    def cleanup_load(self):
+        self.load_all_button.setEnabled(True)
+
+
         
 
     def printText(self):
         print("This works")
+
+
+
     
-if __name__=="__main__":
-    app = QApplication(sys.argv)
-    window = SegMapViewer()
-    window.showMaximized()
-    app.exec()
+# if __name__=="__main__":
+#     app = QApplication(sys.argv)
+#     window = SegMapViewer()
+#     window.showMaximized()
+#     app.exec()

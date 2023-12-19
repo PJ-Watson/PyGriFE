@@ -209,7 +209,6 @@ def make_SEP_catalog(
 
     if in_dir is not None: in_dir = Path(in_dir)
     if out_dir is not None: out_dir = Path(out_dir)
-    print (f"out_dir={out_dir}")
 
     if sci is not None:
         drz_file = sci
@@ -228,8 +227,6 @@ def make_SEP_catalog(
             drz_photplam = im[0].header['PHOTPLAM']
         else:
             drz_photplam = None
-
-        print ("Reached here.")
 
         # Get AB zeropoint
         ZP = utils.calc_header_zeropoint(im, ext=0)
@@ -760,7 +757,6 @@ def regen_multiband_catalogue(
         else:
             psf_files = glob.glob('{0}*psf.fits'.format(field_root))
 
-        print (f"PSF: {psf_files}")
         if len(psf_files) > 0:
             psf_files.sort()
             psf_im = pf.open(psf_files[-1])
@@ -860,22 +856,30 @@ def regen_multiband_catalogue(
             filters = [f.lower() for f in np.unique(info['FILTER'])]
 
     fq = '{0}-{1}_dr?_sci.fits*'
+
+    utils.log_comment(
+        utils.LOGFILE, 
+        f"Filters: {filters}",
+        verbose=True,
+    ) 
     
     for ii, filt in enumerate(filters):
-        print(filt)
+        utils.log_comment(
+            utils.LOGFILE,
+            f"Trying {filt} filter...",
+            verbose=True,
+        )
         if filt.startswith('g'):
             continue
 
         if filt not in ['g102', 'g141', 'g800l']:
             _fstr = fq.format(field_root.replace('-100mas','-*mas'), filt)
             # sci_files = glob.glob(_fstr)
-            print (_fstr)
             if in_dir is not None and in_dir.is_dir():
                 sci_files = [str(f) for f in in_dir.glob(_fstr)]
             else:
                 sci_files = glob.glob(_fstr)
 
-            print (sci_files)
             if len(sci_files) == 0:
                 continue
 
@@ -938,11 +942,12 @@ def regen_multiband_catalogue(
             # Kron total correction from EE
             newk = '{0}_PLAM'.format(filt.upper())
             newk = newk.replace('-CLEAR','')
-            filt_plam = tab.meta[newk]
+            # filt_plam = tab.meta[newk]
 
             tot_corr = prep.get_kron_tot_corr(tab, filt.lower(), 
                                                 pixel_scale=cat_pixel_scale, 
-                                                photplam=filt_plam)
+                                                # photplam=filt_plam,
+                                            )
 
             #ee_corr = prep.get_kron_tot_corr(tab, filter=filt.lower())
             tab['{0}_tot_corr'.format(filt.upper())] = tot_corr

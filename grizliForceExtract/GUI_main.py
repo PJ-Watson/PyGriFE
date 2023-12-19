@@ -10,18 +10,25 @@ from astropy import wcs
 import qimage2ndarray
 import numpy as np
 import time
+import sys
+import json
+from queue import Queue
+
 from seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
 from grizli_extractor import GrizliExtractor
-import json
+from qt_utils import TerminalWindow, WriteStream, Worker
 
 class GrizliGUI(SegMapViewer):
     def __init__(self, new_directory="ForcedExtractions", filters=["F115W", "F150W", "F200W"]):
         super().__init__()
 
         self.layout_side.addWidget(Separator())
-        extract_object_button = QPushButton('Extract Object', self)
-        extract_object_button.clicked.connect(self.extract_object)
-        self.layout_side.addWidget(extract_object_button)
+        self.extract_object_button = QPushButton('Extract Object', self)
+        self.extract_object_button.clicked.connect(self.extraction_handler)
+        self.layout_side.addWidget(self.extract_object_button)
+
+        self.terminal_window = None
+        self.extract_in_progress = False
 
         self.prep_dir = None
         self.field_name = ""
@@ -33,6 +40,12 @@ class GrizliGUI(SegMapViewer):
         if self.files_window is None:
             self.files_window = GrizliFilesWindow(self)
         self.files_window.show()
+
+    def open_terminal_window(self, event=None):
+
+        if self.terminal_window is None:
+            self.terminal_window = TerminalWindow(self)
+        self.terminal_window.show()
 
     def save_output(self, event=None):
 
@@ -52,8 +65,53 @@ class GrizliGUI(SegMapViewer):
 
             seg_hdul.writeto(self.new_dir_path / self.seg_img_path.name, overwrite=True)
 
-    def extract_object(self, event=None):
+    def receiver_fn(self, queue, progress_callback=None):
 
+        while self.extract_in_progress:
+            text = queue.get()
+            progress_callback.emit(text)
+        return
+
+    def extraction_handler(self, event=None):
+
+        self.extract_in_progress = True
+        self.extract_object_button.setEnabled(False)
+        self.open_terminal_window()
+
+        queue = Queue()
+        sys.stdout = WriteStream(queue)
+
+        receive_worker = Worker(self.receiver_fn, queue)
+        receive_worker.signals.progress.connect(self.terminal_window.append_text)
+        self.threadpool.start(receive_worker)
+
+        extract_worker = Worker(self.extract_object)
+        # worker.signals.progress.connect(self.progress_fn)
+        # worker.signals.result.connect(self.root.set_img)
+        extract_worker.signals.finished.connect(self.finish_extractions)
+        self.threadpool.start(extract_worker)
+
+        # self.threadpool
+
+    def finish_extractions(self):
+        # print ("pls end")
+        self.extract_in_progress = False
+        self.extract_object_button.setEnabled(True)
+        sys.stdout = sys.__stdout__
+
+    def extract_object(self, event=None, progress_callback=None):
+
+        # import logging
+        # root = logging.getLogger()
+        # root.setLevel(logging.INFO)
+        # fh = logging.FileHandler('debug.log')
+        # fh.setLevel(logging.INFO)
+
+        # old_stdout = sys.stdout    # in case you want to restore later
+        # sys.stdout = fh.stream  
+
+        # root.addHandler(fh)
+        print ("Beginning extraction.")
         print (self.selected_ids)
 
         self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
@@ -61,12 +119,14 @@ class GrizliGUI(SegMapViewer):
 
         if self.ge is None:
             self.ge = GrizliExtractor(self.field_name, self.prep_dir, self.new_dir_path)
-        # if not hasattr(self.ge, "grp"):
-        #     self.ge.load_contamination_maps()
         self.ge.load_seg_img(self.seg_data[::-1,:])
         self.ge.regen_multiband_catalogue()
+        if not hasattr(self.ge, "grp"):
+            self.ge.load_contamination_maps()
         # self.ge.extract_sep()
-        # self.ge.extract_spectra(self.selected_ids)
+        self.ge.extract_spectra(self.selected_ids)
+        # sys.stdout = old_stdout
+        return
 
 
 class GrizliFilesWindow(FilesWindow):

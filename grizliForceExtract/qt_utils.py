@@ -1,20 +1,29 @@
-""" QtImageViewer.py: PyQt image viewer widget based on QGraphicsView with mouse zooming/panning and ROIs.
-
+""" 
+QtImageViewer.py: PyQt image viewer widget based on QGraphicsView with mouse zooming/panning and ROIs.
+Original version by Marcel Goldschen-Ohm, modified by PJW (scroll direction, zoom location, etc).
+Also includes worker and signals to allow multithreading.
 """
 
 import os.path
+from queue import Queue
+import traceback
+import sys
 
 try:
-    from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
-    from PyQt6.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen
+    from PyQt6.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, \
+        QThreadPool, QObject, QRunnable, pyqtSlot
+    from PyQt6.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QTextCursor
     from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-        QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem
+        QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, \
+        QWidget, QVBoxLayout, QPushButton, QFormLayout, QTextEdit
 except ImportError:
     try:
-        from PyQt5.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize
-        from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen
+        from PyQt5.QtCore import Qt, QRectF, QPoint, QPointF, pyqtSignal, QEvent, QSize, \
+            QThreadPool, QObject, QRunnable, pyqtSlot
+        from PyQt5.QtGui import QImage, QPixmap, QPainterPath, QMouseEvent, QPainter, QPen, QTextCursor
         from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QFileDialog, QSizePolicy, \
-            QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem
+            QGraphicsItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsLineItem, QGraphicsPolygonItem, \
+            QWidget, QVBoxLayout, QPushButton, QFormLayout, QTextEdit
     except ImportError:
         raise ImportError("Requires PyQt (version 5 or 6)")
 
@@ -35,7 +44,7 @@ except ImportError:
 
 __author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
 __version__ = '2.0.0'
-# Modified in part by PJW (scroll direction, zoom location, etc)
+# Modified in part by PJW 
 
 
 class QtImageViewer(QGraphicsView):
@@ -631,3 +640,108 @@ if __name__ == '__main__':
     # Show viewer and run application.
     viewer.show()
     sys.exit(app.exec())
+
+class WorkerSignals(QObject):
+    '''
+    Defines the signals available from a running worker thread.
+
+    Supported signals are:
+
+    finished
+        No data
+
+    error
+        tuple (exctype, value, traceback.format_exc() )
+
+    result
+        object data returned from processing, anything
+
+    progress
+        int indicating % progress
+
+    '''
+    finished = pyqtSignal()
+    error = pyqtSignal(tuple)
+    result = pyqtSignal(object)
+    progress = pyqtSignal(str)
+
+
+class Worker(QRunnable):
+    '''
+    Worker thread
+
+    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
+
+    :param callback: The function callback to run on this worker thread. Supplied args and
+                     kwargs will be passed through to the runner.
+    :type callback: function
+    :param args: Arguments to pass to the callback function
+    :param kwargs: Keywords to pass to the callback function
+
+    '''
+
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+
+        # Store constructor arguments (re-used for processing)
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+        # Add the callback to our kwargs
+        self.kwargs['progress_callback'] = self.signals.progress
+
+    @pyqtSlot()
+    def run(self):
+        '''
+        Initialise the runner function with passed args, kwargs.
+        '''
+
+        # Retrieve args/kwargs here; and fire processing using them
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+        except:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
+        else:
+            self.signals.result.emit(result)  # Return the result of the processing
+        finally:
+            self.signals.finished.emit()  # Done
+
+
+# The new Stream Object which replaces the default stream associated with sys.stdout
+# This object just puts data in a queue!
+class WriteStream(object):
+    def __init__(self,queue):
+        self.queue = queue
+
+    def write(self, text):
+        self.queue.put(text)
+
+def receiver_fn(queue, progress_callback=None):
+
+    while True:
+        text = queue.get()
+        progress_callback.emit(text)
+
+class TerminalWindow(QWidget):
+    def __init__(self, root):
+        super().__init__()
+        self.root = root
+        self.setWindowTitle("Terminal Output")
+
+        self.v_layout = QVBoxLayout()
+
+        self.textedit = QTextEdit()
+        self.v_layout.addWidget(self.textedit)
+
+        self.setLayout(self.v_layout)
+        self.setMinimumWidth(720)
+        self.setMinimumWidth(568)
+
+    @pyqtSlot(str)
+    def append_text(self,text):
+        self.textedit.moveCursor(QTextCursor.MoveOperation.End)
+        self.textedit.insertPlainText( text )

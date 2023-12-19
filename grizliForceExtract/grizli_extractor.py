@@ -3,10 +3,11 @@ import os
 import glob
 import numpy as np
 import astropy.io.fits as pf
-import astropy.wcs as pywcs
+from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 from importlib.metadata import version
 import astropy.units as u
+from astropy.coordinates import SkyCoord 
 from tqdm import tqdm
 from pathlib import Path
 import pickle
@@ -16,6 +17,8 @@ import math
 import time
 import multiprocessing
 from functools import partial
+import shutil
+import logging
 
 if version("sep").split(".")[1] < "3":
     raise ImportError("""
@@ -35,19 +38,24 @@ if version("sep").split(".")[1] < "3":
 # os.environ["GRIZLI"] = str(grizli_dir)
 # os.environ["iref"] = str(grizli_dir / "iref")
 # os.environ["jref"] = str(grizli_dir / "jref")
+# cwd = Path.cwd()
+# os.chdir(os.path.join(grizli.GRIZLI_PATH, 'CONF'))
 
-grizli_dir = Path(
-    "/media/sharedData/data/2023_11_07_spectral_orders/ForcedExtractions/"
-) / "grizli"
+# grizli.utils.fetch_default_calibs()
+# grizli.utils.fetch_config_files(get_jwst=True)
+# if not os.path.exists('GR150C.F115W.221215.conf'):
+#     os.system('wget "https://zenodo.org/record/7628094/files/niriss_config_221215.tar.gz?download=1" -O niriss_config_221215.tar.gz')
+#     os.system('tar xzvf niriss_config_221215.tar.gz')
+# if not os.path.exists('niriss_sens_221215.tar.gz'):
+#     os.system('wget "https://zenodo.org/record/7628094/files/niriss_sens_221215.tar.gz" -O niriss_sens_221215.tar.gz')
+#     os.system('tar xzvf niriss_sens_221215.tar.gz')
+# os.chdir(cwd)
+# eazy.fetch_eazy_photoz()
 
-grizli_dir.mkdir(exist_ok=True)
-(grizli_dir / "CONF").mkdir(exist_ok=True)
-(grizli_dir / "templates").mkdir(exist_ok=True)
-(grizli_dir / "iref").mkdir(exist_ok=True)
-(grizli_dir / "iref").mkdir(exist_ok=True)
-os.environ["GRIZLI"] = str(grizli_dir)
-os.environ["iref"] = str(grizli_dir / "iref")
-os.environ["jref"] = str(grizli_dir / "jref")
+# try:
+#     grizli.utils.symlink_templates(force=True)
+# except:
+#     pass
 
 try:
     Path(os.getenv("GRIZLI")).is_dir()
@@ -63,29 +71,28 @@ except:
 
 import grizli
 from grizli import utils, prep, jwst_utils, multifit, fitting
-from grizli.pipeline import auto_script
+from grizli.pipeline import auto_script, photoz
 import eazy
 
-cwd = Path.cwd()
-os.chdir(os.path.join(grizli.GRIZLI_PATH, 'CONF'))
+from grizli_functions import catalogue_fns, FLT_fns
 
-grizli.utils.fetch_default_calibs()
-grizli.utils.fetch_config_files(get_jwst=True)
-if not os.path.exists('GR150C.F115W.221215.conf'):
-    os.system('wget "https://zenodo.org/record/7628094/files/niriss_config_221215.tar.gz?download=1" -O niriss_config_221215.tar.gz')
-    os.system('tar xzvf niriss_config_221215.tar.gz')
-if not os.path.exists('niriss_sens_221215.tar.gz'):
-    os.system('wget "https://zenodo.org/record/7628094/files/niriss_sens_221215.tar.gz" -O niriss_sens_221215.tar.gz')
-    os.system('tar xzvf niriss_sens_221215.tar.gz')
-os.chdir(cwd)
-eazy.fetch_eazy_photoz()
+extended_translate = {
+    'f098m': 201, 'f105w': 202, 'f110w': 241, 'f125w': 203, 'f140w': 204, 
+    'f160w': 205, 'f435w': 233, 'f475w': 234, 'f555w': 235, 'f606w': 236, 
+    'f625w': 237, 'f775w': 238, 'f814w': 239, 'f850lp': 240, 'f702w': 15, 
+    'f600lpu': 243, 'f225wu': 207, 'f275wu': 208, 'f336wu': 209, 'f350lpu': 339, 
+    'f438wu': 211, 'f475wu': 212, 'f475xu': 242, 'f555wu': 213, 'f606wu': 214, 
+    'f625wu': 215, 'f775wu': 216, 'f814wu': 217, 'f390wu': 210, 'ch1': 18, 
+    'ch2': 19, 'f336w':209, 'f350lp':339, 'f115w': 309, 'f150w': 310, 'f200w': 311,
+    "f277w": 375,
+}
 
-try:
-    grizli.utils.symlink_templates(force=True)
-except:
-    pass
+multifit._loadFLT = FLT_fns.load_and_mod_FLT
 
-from grizli_functions import catalogue_fns
+# photoz.FILTER_TRANS = extended_translate
+# photoz.eazy_photoz = partial(photoz.eazy_photoz, filter_trans=extended_translate)
+
+# print (photoz.eazy_photoz.__defaults__)
 
 """
 Steps:
@@ -110,18 +117,18 @@ Steps:
 
 """
 
-def _modify_conf_file_location(file):
+# def _modify_conf_file_location(file):
 
-    if os.path.exists(file) & ('GrismFLT' in file):
-        print(f'Checking conf file location for {file}.')
+#     if os.path.exists(file) & ('GrismFLT' in file):
+#         print(f'Checking conf file location for {file}.')
 
-        with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'rb') as fp:
-            flt = pickle.load(fp)
+#         with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'rb') as fp:
+#             flt = pickle.load(fp)
 
-        flt.conf_file = f"{os.environ['GRIZLI']}/CONF/{flt.conf_file.split('/')[-1]}"
+#         flt.conf_file = f"{os.environ['GRIZLI']}/CONF/{flt.conf_file.split('/')[-1]}"
 
-        with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'wb') as fp:
-            pickle.dump(flt, fp)
+#         with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'wb') as fp:
+#             pickle.dump(flt, fp)
 
 class GrizliExtractor:
 
@@ -132,15 +139,49 @@ class GrizliExtractor:
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(exist_ok=True, parents=True)
 
-        grizli_dir = self.out_dir / "grizli"
-        grizli_dir.mkdir(exist_ok=True)
-        (grizli_dir / "CONF").mkdir(exist_ok=True)
-        (grizli_dir / "templates").mkdir(exist_ok=True)
-        (grizli_dir / "iref").mkdir(exist_ok=True)
-        (grizli_dir / "iref").mkdir(exist_ok=True)
-        os.environ["GRIZLI"] = str(grizli_dir)
-        os.environ["iref"] = str(grizli_dir / "iref")
-        os.environ["jref"] = str(grizli_dir / "jref")
+        copy_patterns = ["*FLT.fits", "*FLT.pkl", "*01.wcs.fits"]
+        for pattern in copy_patterns:
+            orig_files = self.in_dir.glob(pattern)
+            for o in orig_files:
+                out_path = self.out_dir/o.name
+                if not out_path.is_file():
+                    utils.log_comment(
+                        utils.LOGFILE,
+                        f"Copying file {o}",
+                        verbose=True,
+                    )
+                    shutil.copy(
+                        src=o,
+                        dst=self.out_dir/o.name,
+                        follow_symlinks=True,
+                    )
+        
+        link_patterns = ["*drz_sci.fits", "*drz_wht.fits"]
+        for pattern in link_patterns:
+            orig_files = self.in_dir.glob(self.field_root+pattern)
+            for o in orig_files:
+                out_path = self.out_dir/o.name
+                try:
+                    out_path.symlink_to(o)
+                except:
+                    utils.log_comment(
+                        utils.LOGFILE,
+                        f"File {out_path.name} exists already.",
+                        verbose=True,
+                    )
+                # print (o.name)
+
+        # print ([*flt_files])
+
+        # grizli_dir = self.out_dir / "grizli"
+        # grizli_dir.mkdir(exist_ok=True)
+        # (grizli_dir / "CONF").mkdir(exist_ok=True)
+        # (grizli_dir / "templates").mkdir(exist_ok=True)
+        # (grizli_dir / "iref").mkdir(exist_ok=True)
+        # (grizli_dir / "iref").mkdir(exist_ok=True)
+        # os.environ["GRIZLI"] = str(grizli_dir)
+        # os.environ["iref"] = str(grizli_dir / "iref")
+        # os.environ["jref"] = str(grizli_dir / "jref")
 
         # print (os.environ["GRIZLI"])
 
@@ -151,24 +192,49 @@ class GrizliExtractor:
         # reload (grizli)
         # print (grizli.GRIZLI_PATH)
 
-    def load_seg_img(self, seg_img):
+    def load_orig_seg_img(self, seg_img_path, ext=0):
 
-        self.seg_img = seg_img.byteswap().newbyteorder()
+        seg_img_path = Path(seg_img_path)
 
-    def regen_multiband_catalogue(self, *args, **kwargs):
+        self.seg_name = seg_img_path.name
+
+        shutil.copy(
+            src=seg_img_path,
+            dst=self.out_dir/seg_img_path.with_stem(f"orig_{seg_img_path.stem}")
+        )
+        
+        with pf.open(seg_img_path) as hdul:
+            self.seg_img = hdul[ext].data.byteswap().newbyteorder()
+            self.seg_hdr = hdul[ext].header
+            self.seg_wcs = WCS(self.seg_hdr)
+
+    def regen_multiband_catalogue(self, **kwargs):
+
+        utils.log_comment(
+            utils.LOGFILE,
+            "Regenerating multiband catalogue...",
+            verbose=True,
+            show_date=True,
+        )
+
+        [p.unlink() for p in self.out_dir.glob("*phot_apcorr.fits")]
+
+        kwargs["get_all_filters"] = kwargs.get("get_all_filters", True)
 
         self.catalogue = catalogue_fns.regen_multiband_catalogue(
             self.field_root, 
             seg_image=self.seg_img,
-            in_dir=self.in_dir,
+            in_dir=self.out_dir,
             out_dir=self.out_dir,
-            detection_filter="ir",
-            get_all_filters=True,
-            threshold=1.8,
-            *args, 
             **kwargs,
         )
-        # print (self.out_dir)multiband_catalog(field_root=root, detection_filter='ir', get_all_filters=True, threshold=1.8
+
+        utils.log_comment(
+            utils.LOGFILE,
+            "Multiband catalogue complete.",
+            verbose=True,
+            show_date=True,
+        )
 
     def _modify_FLT_seg(self, flt, seg_file=None):
         print (flt, seg_file)
@@ -176,86 +242,53 @@ class GrizliExtractor:
         flt.process_seg_file(seg_file)
 
 
-    def load_contamination_maps(self):
+    def load_contamination_maps(self, detection_filter="ir", pad=800, cpu_count=4, **kwargs):
 
         """
-        This is where I'll need to focus more of my efforts next.
-        Since it appears to be loading *.pkl files, probably the original *fits files will need to be modified.
-        Alternatively, load the files as per usual, and then modify grp in place?
+        Be careful with the cpu_count - the memory footprint per process is extremely high 
+        (e.g. with an 6P/8E CPU, and 32GB RAM, I typically limit this to <=6 cores).
 
         """
 
+        grism_files = [str(p) for p in self.out_dir.glob("*GrismFLT.fits")]
 
-        print (grizli.__version__)
-
-        grism_files = [str(p) for p in self.in_dir.glob("*GrismFLT.fits")]
-
-        # print (np.minimum(multiprocessing.cpu_count(), 8))
-        if multiprocessing.cpu_count()>2:
-            with multiprocessing.Pool(processes=np.minimum(multiprocessing.cpu_count(), 8)) as pool:
-            # with multiprocessing.Pool(processes=2) as pool:
-                pool.map(_modify_conf_file_location, grism_files)
-        else:
-            [_modify_conf_file_location(g) for g in grism_files]
-
-            # pool = multiprocessing.Pool(processes=multiprocessing.cpu_count()-1)
-            # results = [
-            #     pool.apply_async(
-            #         self.modify_contamination_map(g)
-            #     ) for g in grism_files
-            # ]
-            # pool.close()
-            # pool.join()
-            # for g in grism_files:
-
-            #     process = multiprocessing.Process(target=self.modify_contamination_map, args=(g,))
-            #     process.start()
-
-                # status = flt.load_from_fits(save_file)
-
-            # with pf.open(g) as g_hdul:
-            #     g_hdul.info()
-
-        self.grp = multifit.GroupFLT(
-            grism_files=grism_files,
-            # catalog=str(self.in_dir / f"{self.field_root}-ir.cat.fits"),
-            cpu_count=-1,
-            sci_extn=1,
-            pad=800,
-            seg_file=str(self.out_dir / f"{self.field_root}-ir_seg.fits"),
-            catalog=str(self.out_dir / f"{self.field_root}-ir.cat.fits"),
+        utils.log_comment(
+            utils.LOGFILE,
+            f"Loading {len(grism_files)} grism files, grizli version={grizli.__version__}",
+            verbose=True,
+            show_date=True,
         )
 
-        # partial_flt_fn = partial(self._modify_FLT_seg, seg_file=str(self.out_dir / f"{self.field_root}-ir_seg.fits"))
-        # if multiprocessing.cpu_count()>2:
-        #     print ("Starting multi")
-        #     with multiprocessing.Pool(processes=np.minimum(multiprocessing.cpu_count(), 2)) as pool:
-        #         # processed = pool.map(partial_flt_fn, self.grp.FLTs)
-        #         for f in self.grp.FLTs:
-        #             pool.apply_async(partial_flt_fn, f)
+        catalog_path = Path(
+            kwargs.get(
+                "catalog",
+                self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits"
+            ),
+        )
+        if not catalog_path.is_file():
+            raise FileNotFoundError(
+                f"Catalogue file not found at the specified location: {catalog_path}."
+            )
+        seg_path = Path(
+            kwargs.get(
+                "seg_file",
+                self.out_dir / f"{self.field_root}-{detection_filter}_seg.fits"
+            ),
+        )
+        if not seg_path.is_file():
+            raise FileNotFoundError(
+                f"Segmentation map not found at the specified location: {seg_path}."
+            )
 
-        #         pool.close()
-        #         pool.join()
-        # else:
-        #     [partial_flt_fn(g) for g in self.grp.FLTs]
+        self.grp = multifit.GroupFLT(
+            cpu_count=cpu_count,
+            grism_files=grism_files,
+            pad=pad,
+            seg_file=str(seg_path),
+            catalog=str(catalog_path),
+        )
 
-        # # print 
-        # # print (dir(self.grp))
-        # # print (dir(self.grp.FLTs[0]))
-        # # print (self.grp.FLTs[0].catalog[2050:2070])
-        # # print (self.grp.FLTs[0].catalog_file)
-
-        # # fig, ax = plt.subplots()
-        # # plt.imshow(self.grp.FLTs[0].seg)
-        # # plt.show()
-
-        # # print (self.grp.FLTs[0].seg_file)
-
-        for flt in self.grp.FLTs:
-            flt.process_seg_file(str(self.out_dir / f"{self.field_root}-ir_seg.fits"))
-        # # print (self.grp.FLTs[0].process_seg_file(str(self.out_dir / f"{self.field_root}-ir_seg.fits")))
-
-    def extract_spectra(self, obj_id_list):
+    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None):
 
         print("5. Extracting spectra...")
         os.chdir(self.out_dir)
@@ -266,407 +299,101 @@ class GrizliExtractor:
             min_sens=0.0,
             min_mask=0.0,
             include_photometry=True,  # set both of these to True to include photometry in fitting
-            use_phot_obj=True
+            use_phot_obj=True,
         )  # set both of these to True to include photometry in fitting
+        
+        if beams_kwargs is None:
+            beams_kwargs = {}
+        beams_kwargs["size"] = beams_kwargs.get("size", 25)
+        beams_kwargs["min_mask"] = beams_kwargs.get("min_mask", 0.)
+        beams_kwargs["min_sens"] = beams_kwargs.get("min_sens", 0.)
+        beams_kwargs["show_exception"] = beams_kwargs.get("show_exception", True)
+
+        if multibeam_kwargs is None:
+            multibeam_kwargs = {}
+        multibeam_kwargs["fcontam"] = multibeam_kwargs.get("fcontam", 0.1)
+        multibeam_kwargs["min_mask"] = multibeam_kwargs.get("min_mask", 0.)
+        multibeam_kwargs["min_sens"] = multibeam_kwargs.get("min_sens", 0.)
+
+        if not hasattr(obj_id_list, '__iter__'):
+            obj_id_list = [obj_id_list]
+
         for obj_id in tqdm(obj_id_list):
-            beams = self.grp.get_beams(obj_id, size=75, min_mask=0, min_sens=0)
-            mb = multifit.MultiBeam(beams, fcontam=0.1, min_sens=0, min_mask=0, group_name=self.field_root)
+            beams = self.grp.get_beams(obj_id, **beams_kwargs)
+            mb = multifit.MultiBeam(beams, group_name=self.field_root, **multibeam_kwargs)
             #     _ = mb.oned_figure()
             #     _ = mb.drizzle_grisms_and_PAs(size=32, scale=0.5, diff=False)
             mb.write_master_fits()
             _ = fitting.run_all_parallel(
-                obj_id, zr=[0.28,0.31], verbose=True, get_output_data=True, skip_complete=False
+                obj_id, zr=z_range, verbose=True, get_output_data=True,
             )
         print("5. Extracting spectra...[COMPLETE]")
 
+    def _create_circular_mask(self, x_c, y_c, radius):
 
-    def extract_sep(self, obj_id, threshold=1.8):
+        Y, X = np.ogrid[:self.seg_img.shape[0], :self.seg_img.shape[1]]
 
-        x = [0,6573]
-        y = [0,6429]
+        sqrd_dist = (X - x_c)**2 + (Y-y_c)**2
 
-        # x = [2750,3250]
-        # y = [1450,2000]
-
-        # x = [2916,2960]
-        # y = [1881,1926]
-
-        # x = [2818,2909]
-        # y = [2208,2305]
-
-        with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Prep/nis-wfss-ir_seg.fits") as hdul:
-
-            seg_img = hdul[0].data[x[0]:x[1],y[0]:y[1]].byteswap().newbyteorder()
-
-        with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Prep/nis-wfss-ir_bkg.fits") as hdul:
-
-            bkg_img = hdul[0].data[x[0]:x[1],y[0]:y[1]].byteswap().newbyteorder()
-            
-        with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Prep/nis-wfss-ir_drz_sci.fits") as hdul:
-
-            det_img = hdul[0].data[x[0]:x[1],y[0]:y[1]].byteswap().newbyteorder()
-            
-        with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Prep/nis-wfss-ir_drz_wht.fits") as hdul:
-
-            wht_img = hdul[0].data[x[0]:x[1],y[0]:y[1]].byteswap().newbyteorder()
-
-        import matplotlib.pyplot as plt
-
-        # fig, ax = plt.subplots()
-        # ax.imshow(seg_img)
-        # plt.show()
-
-        # seg_img[seg_img!=2125] = 0
-
-        # area = np.where(seg_img==obj_id)
-
-        # details = {}
-
-        # details["NPIX"] = len(area[0])
-        # details["XMIN"] = np.nanmin(area[1])
-        # details["XMAX"] = np.nanmax(area[1])
-        # details["YMIN"] = np.nanmin(area[0])
-        # details["YMAX"] = np.nanmax(area[0])
-
-        # print (np.nanmean(area[0]))
-        # print (np.nanmin(det_img[area]))
-
-        # print (np.nanmin((wht_img*(det_img-bkg_img)**2)[area]))
-
-        # non_sky_pix = (det_img-bkg_img)
-
-        # wht_img = np.sqrt(wht_img)
-
-        # print ("Weight", np.nanmean(wht_img[area]))
-        # print ("Detection", np.nanmean(det_img[area]))
-
-        # print ("bkg", np.nanmean(np))
-
-
-        # print (np.nanmin((det_img*wht_img)[area]))
-
-        err = 1/np.sqrt(wht_img)
-        # True mask pixels are masked with sep
-        mask = (~np.isfinite(err)) | (err == 0) | (~np.isfinite(det_img))
-        err[mask] = 0
-
-        # fig, ax = plt.subplots()
-        # ax.imshow(mask)
-        # plt.show()
-
-        bkg_input={'bw': 128, 'bh': 128, 'fw': 3, 'fh': 3}
-
-        bkg = sep.Background(det_img, mask=mask, **bkg_input)
-        bkg_data = bkg.back()
-        data_bkg = det_img - bkg_data
-        # det_img_sub = data_bkg
-        # err = bkg.rms()
-        ratio = bkg.rms()/err
-        err_scale = np.median(ratio[(~mask) & np.isfinite(ratio)])
-        # print (err_scale)
-
-        err *= err_scale
-
-        # print ("ERROR_STATS: ", err_scale, np.nanmin(err), np.nanmedian(err), np.nanstd(err))
-        # print ("ERROR_STATS: ", np.nanmean(data_bkg), err_scale, np.nanmin(data_bkg), np.nanmedian(data_bkg), np.nanstd(data_bkg))
-        # exit
-
-        # sep.set_extract_pixstack(int(3e7))
-        # sep.set_sub_object_limit(4096)
-        # objects, seg = sep.extract(
-        #     data_bkg, 
-        #     threshold, 
-        #     err=err,
-        #     mask=mask, 
-        #     segmentation_map=True,
-        #     **prep.SEP_DETECT_PARAMS
-        # )
-
-        # print (seg_img.dtype)
-
-        # Look at updating info[co] rather than setting luflag
-
-        # exit()
-
-        # from grizliForceExtract.utils_c import sep_fns
-
-        # data_bkg = np.zeros()
-
-        # prep.SEP_DETECT_PARAMS['minarea'] = 1
-        # prep.SEP_DETECT_PARAMS['clean'] = False
-        # prep.SEP_DETECT_PARAMS['filter_kernel'] = None
-
-        # print (prep.SEP_DETECT_PARAMS)
-
-
-
-        # data_bkg = np.array(
-        #     # [
-        #     #     [0,0,0,1,0],
-        #     #     [0,0,0,1,0],
-        #     #     [0,1,0,1,0],
-        #     #     [1,1,0,0,0],
-        #     #     [0,1,0,0,0],
-        #     # ],
-        #     [
-        #         [0,1,1,1,0],
-        #         [0,0,1,1,0],
-        #         [0,0,0,1,0],
-        #         [0,1,0,1,0],
-        #         [0,1,0,0,0],
-        #     ],
-        #     dtype=float,
-        # )#.byteswap().newbyteorder()
-
-        # data_bkg = np.zeros((17000,17000), dtype=float)
-        # data_bkg[13000:13500,13000:13500] = 1.
-
-        # err = np.full_like(data_bkg, 0.01, dtype=float)
-        # mask = np.zeros_like(data_bkg, dtype=float)
-
-        # data_bkg = np.zeros((24000,24000), dtype=np.float32)
-        # data_bkg[13000:13500,13000:13500] = 1.
-
-        # # print (36000**2*8)
-
-        # err = np.full_like(data_bkg, 0.01, dtype=np.float32)
-        # mask = np.zeros_like(data_bkg, dtype=np.float32)
-
-        # seg_img = np.array(
-        #     # [
-        #     #     [0,0,0,1,0],
-        #     #     [0,0,0,1,0],
-        #     #     [0,1,0,1,0],
-        #     #     [1,1,0,0,0],
-        #     #     [0,1,0,0,0],
-        #     # ],
-        #     [
-        #         [0,1,1,1,0],
-        #         [0,0,1,1,0],
-        #         [0,0,0,1,0],
-        #         [0,2,0,1,0],
-        #         [0,2,0,0,0],
-        #     ],
-        #     dtype=float,
-        # )#.byteswap().newbyteorder()
-
-        # err = np.full_like(data_bkg, 0.01, dtype=float)#.byteswap().newbyteorder()
-        # mask = np.zeros_like(data_bkg, dtype=float)#.byteswap().newbyteorder()
-
-        sep.set_extract_pixstack(int(3e8))
-        sep.set_sub_object_limit(4096)
-
-        t1 = time.time()
-
-        objects, seg = sep.extract(
-            data_bkg, 
-            threshold, 
-            err=err,
-            mask=mask, 
-            segmentation_map=seg_img,
-            # segmentation_map=True,
-            **prep.SEP_DETECT_PARAMS
-        )
-
-        print (f"Extracted objects in {time.time()-t1:.3f}s.")
-
-        # print (len(objects))
-        print ("Objects", objects)
-        # print (seg)
-
-        # output_markers = np.array(
-        #     [
-        #         [" "," "," ","S","F"],
-        #         [" "," "," ","S","F"],
-        #         [" ","S","F","S","F"],
-        #         ["S"," ","F"," "," "],
-        #         [" ","S","F"," "," "],
-        #     ],
-        #     # dtype=float,
-        # )#.byteswap().newbyteorder()
-
-        # # from astropy.table import Table
-        # # test_tab = Table.read("info.txt", format="ascii.no_header")
-        # # # print (test_tab)
-        # # test_array = np.zeros_like(seg_img)
-        # # # print (np.max(test_tab["col1"]))
-        # # # print (np.max(test_tab["col2"]))
-        # # # print (test_array.shape)
-        # # for row in test_tab:
-        # #     try:
-        # #         test_array[row[1], row[0]] = row[2]
-        # #     except IndexError:
-        # #         pass
-
-        # fig, ax = plt.subplots()
-        # seg = seg.astype(float)
-        # seg[seg==0] = np.nan
-        # # im = ax.imshow(test_array, origin="lower")
-        # # plt.colorbar(im)
-        # # plt.show()
-        # ax.set_facecolor("0.7")
-        # ax.imshow(seg, cmap="plasma")
-        # plt.show()
-
-        # print (err[3000:3005, 3000:30005])
-        # from astropy.convolution import convolve_fft as convolve
-#         from astropy.convolution import convolve
-#         print (prep.GAUSS_3_7x7)
-
-        # self.convolve_matched(det_img_sub, err, prep.GAUSS_3_7x7)
-
-#         det_img_orig = np.copy(det_img_sub)
-#         det_img_sub = convolve(det_img_sub, prep.GAUSS_3_7x7)
-#         err_conv = convolve(err, prep.GAUSS_3_7x7)
-
-#         print (np.nanmedian(err[area])*1.8)
-#         print (np.nanmean(err[area])*1.8)
-#         thresholds = err*2
-#         print (sum(mask[area]))
-#         # thresh_mask = (det_img_sub > thresholds) & (seg_img==obj_id)
-
-#         # seg_img[~thresh_mask] = 0
-#         # new_area = np.where(seg_img==obj_id)
-
-#         new_area = area
-# # ERROR_STATS:  0.0 0.00046226996 0.0034473338
-#         rv = np.nansum(det_img_sub[new_area])
-
-#         # det_img_sub = det_img
-#         # det_img_sub += thresholds
-#         print (np.nanmax(det_img_sub[new_area]))
-
-        
-#         mx = my = tv = 0.0
-#         mx2 = my2 = mxy = 0.0
-
-#         mean_thresh = np.nanmean(err[area])*1.8
-#         print ("THRESHOLDS?")
-#         print (np.nanmin(err[area]*1.8))
-#         print (np.nanmedian(err[area]*1.8))
-#         print (np.nanmean(err_conv[area]*1.8))
-#         print (np.nanmin(err_conv[area]*1.8))
-#         print (np.nanmedian(err_conv[area]*1.8))
-#         print (np.nanmean(err_conv[area]*1.8))
-#         print ("THRESHOLDS over")
-
-#         for y, x in zip(new_area[0], new_area[1]):
-#             # if det_img_orig[y,x]>1.8*err[y,x]:
-#             # if det_img_sub[y,x]>1.8*err_conv[y,x]:
-#             if det_img_sub[y,x]> 0.004350837785750628:
-
-#             # if det_img_orig[y,x]>thresholds[y,x]:
-#             # if det_img_sub[y,x]>mean_thresh:
-#             # if det_img_sub[y,x]>np.nanmean(err[area])*1.8:
-#                 tv+=1
-#                 # print (det_img_sub[y,x], thresholds[y,x])
-#                 # print (a)
-#             cval = det_img_sub[y,x]
-#             x -= details["XMIN"]
-#             y -= details["YMIN"]
-
-#             # mx += x*det_img_sub[y,x]
-#             # my += y*det_img_sub[y,x]
-#             # mx2 += x*x*det_img_sub[y,x]
-#             # my2 += y*y*det_img_sub[y,x]
-#             # mxy += x*y*det_img_sub[y,x]
-
-#             mx += cval * x
-#             my += cval * y
-#             mx2 += cval * x*x
-#             my2 += cval * y*y
-#             mxy += cval * x*y
-
-#         xm = mx/rv
-#         ym = my/rv
-
-#         xm2 = mx2 / rv - xm * xm
-#         ym2 = my2 / rv - ym * ym
-#         xym = mxy / rv - xm * ym
-
-#         print (xm+details["XMIN"], ym+details["YMIN"], xm2, ym2, xym)
-#         print (xm2*ym2-xym*xym)
-#         print (details, tv)
-#         print (rv)
-#         # print (rv/np.nansum(err[new_area]))
-#         # print (np.nanmean(new_area[1]*det_img_sub))
-#         # print (np.nanmean(area[1]))
-#         # print (1.8*err[area])
-
-
-#         # print (bkg.rms()[3000:3005, 3000:30005])
-
-#         # # det_test = 
-#         # bkg = sep.Background(det_img)
-#         # # print (bkg.back()[3000:3005, 3000:30005])
-#         # # print ((bkg.back()**2)[3000:3005, 3000:30005])
-#         # # print (np.nanmax(bkg))
-#         # # bkg_rms = bkg.rms()
-#         # print (bkg.rms()[3000:3005, 3000:30005])
-#         # print (np.nanmax(bkg_rms))
-
-
-#         # details["thresh"] = 
-
+        mask = sqrd_dist <= radius**2
+        return mask
 
     
+    def set_obj_circ(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1):
 
-# print("Grizli version: ", grizli.__version__)
+        if not hasattr(self, "seg_img"):
+            raise AttributeError("Segmentation map not set.")
 
-# print("1. Importing Python packages...[COMPLETE]")
-# ############################################
-# ### Define necessary variables and paths ###
-# ############################################
-# print("2. Defining variables and paths...")
+        radius = np.atleast_1d(np.asarray(radius))
 
-# HOME_PATH = "/media/sharedData/data/GLASS_owncloud/NIRISS/ABELL2744/v3"  # change this
-# root = "nis-wfss"
+        if (ra is not None) & (dec is not None):
+            try:
+                ra = np.atleast_1d(np.asarray(ra))
+                dec = np.atleast_1d(np.asarray(dec))
+                input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
+            except Exception as e:
+                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+            # try:
 
-# os.chdir(HOME_PATH + "/Prep")
+            print (self.seg_wcs.footprint_contains(input_coords))
+            x_p, y_p = input_coords.to_pixel(self.seg_wcs)
 
-# print("2. Defining variables and paths...[COMPLETE]")
+        elif (x is not None) & (y is not None):
+            try:
+                x = np.asarray(x)
+                y = np.asarray(y)
+                input_coords = SkyCoord(x=x, y=y)
+            except Exception as e:
+                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+        else:
+            raise Exception("Coordinate pair not supplied.")
 
-if __name__=="__main__":
+        # print (np.ndim(radius))
+        # print (radius.shape)
+        # print (repr(radius))
+        # print (x_p.shape)
+        # print (len(radius))
+        if radius.shape[0]<x_p.shape[0]:
+            radius = np.array([radius[0]]*x_p.shape[0])
 
-    ge = GrizliExtractor(
-        "nis-wfss", 
-        "/media/sharedData/data/2023_11_07_spectral_orders/seg_map_tests",
-        # "/media/sharedData/data/2023_11_07_spectral_orders/ForcedExtractions",
-        # "/media/sharedData/data/GLASS_owncloud/NIRISS/ABELL2744/v3/Prep",
-        # "/media/sharedData/data/GLASS_owncloud/NIRISS/ABELL2744/v3/ForcedExtractions",
-        # "/media/sharedData/data/2023_11_07_spectral_orders/Prep_testing_v3",
-        "/media/sharedData/data/2023_11_07_spectral_orders/seg_map_tests/sep_testing",
-    )
+        curr_max = np.nanmax(self.seg_img) + 1
+        obj_ids = curr_max + np.arange(radius.shape[0])
+        for o_i, x_i, y_i, r_i in zip(obj_ids, x_p, y_p, radius):
+            self.seg_img[self._create_circular_mask(x_i,y_i,r_i)] = o_i
+        # fig, ax = plt.subplots()
+        # ax.imshow(self.seg_img, origin="lower", cmap="plasma")
+        # plt.show()
 
-    with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/ForcedExtractions/nis-wfss-ir_seg.fits") as hdul:
+        return obj_ids
 
-        # seg_img = hdul[0].data[x[0]:x[1],y[0]:y[1]].byteswap().newbyteorder()
-        seg_img = hdul[0].data
+        # try:
+        #     print (in1.dtype)
+        # except:
+        #     print ("no fucking units")
 
-    # seg_img[np.isin(seg_img, np.arange(2125,2134))] = 2125
+        # try:
+        #     input_coords = SkyCoord(ra, dec)
+        # except Exception as e:
+        #     raise Exception(f"Improper format for coordinates: {e}")
 
-    print (prep.SEP_DETECT_PARAMS)
-
-    params = prep.SEP_DETECT_PARAMS
-    # params["deblend_nthresh"] = 64
-    # params["deblend_cont"] = 0.0005
-
-    ge.load_seg_img(seg_img)
-    # ge.seg_img = None
-    ge.regen_multiband_catalogue(
-        detection_params=params,
-    )
-
-    # ge.extract_sep([3208])
-    # ge.regen_multiband_catalogue()
-
-    # ge.load_contamination_maps()
-    # ge.extract_spectra([1945])
-    # ge.extract_spectra([2125,2126,2127,2128,2129,2130,2132,2133,2134])
-
-    # import eazy
-    # import grizli
-    # import os
-
-    # print (os.environ["GRIZLI"])
-    # os.environ["GRIZLI"] = 
+        
