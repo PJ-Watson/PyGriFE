@@ -288,7 +288,7 @@ class GrizliExtractor:
             catalog=str(catalog_path),
         )
 
-    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None):
+    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None, spectrum_1d=None):
 
         print("5. Extracting spectra...")
         os.chdir(self.out_dir)
@@ -298,13 +298,13 @@ class GrizliExtractor:
             field_root=self.field_root,
             min_sens=0.0,
             min_mask=0.0,
-            include_photometry=True,  # set both of these to True to include photometry in fitting
-            use_phot_obj=True,
+            # include_photometry=True,  # set both of these to True to include photometry in fitting
+            # use_phot_obj=True,
         )  # set both of these to True to include photometry in fitting
         
         if beams_kwargs is None:
             beams_kwargs = {}
-        beams_kwargs["size"] = beams_kwargs.get("size", 25)
+        beams_kwargs["size"] = beams_kwargs.get("size", 75)
         beams_kwargs["min_mask"] = beams_kwargs.get("min_mask", 0.)
         beams_kwargs["min_sens"] = beams_kwargs.get("min_sens", 0.)
         beams_kwargs["show_exception"] = beams_kwargs.get("show_exception", True)
@@ -319,7 +319,19 @@ class GrizliExtractor:
             obj_id_list = [obj_id_list]
 
         for obj_id in tqdm(obj_id_list):
-            beams = self.grp.get_beams(obj_id, **beams_kwargs)
+            if spectrum_1d is not None:
+                beams = FLT_fns.get_beams_with_spectrum(self.grp, obj_id, spectrum_1d=spectrum_1d, **beams_kwargs)
+            else:
+                beams = self.grp.get_beams(obj_id, **beams_kwargs)
+
+                # with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Extractions/nis-wfss_02186.full.fits") as hdul:
+                #     sp = utils.GTable(hdul['TEMPL'].data)
+                #     dt = float
+                #     wave = np.cast[dt](sp['wave'])  # .byteswap()
+                #     flux = np.cast[dt](sp["full"])  # .byteswap()
+                #     flux /= (np.nansum(hdul["DSCI"].data)*1e-19)
+                #     print ("DIRECT_SUM:", np.nansum(hdul["DSCI"].data)*1e-19)
+
             mb = multifit.MultiBeam(beams, group_name=self.field_root, **multibeam_kwargs)
             #     _ = mb.oned_figure()
             #     _ = mb.drizzle_grisms_and_PAs(size=32, scale=0.5, diff=False)
@@ -328,6 +340,48 @@ class GrizliExtractor:
                 obj_id, zr=z_range, verbose=True, get_output_data=True,
             )
         print("5. Extracting spectra...[COMPLETE]")
+
+    def refine_contam_model_with_fits(self, spectrum="full", max_chinu=5, fit_files=None):
+        """
+        Refine the full-field grism models with the best fit spectra from 
+        individual extractions.
+        """
+
+        if fit_files is None:
+            fit_files = glob.glob('*full.fits')
+            fit_files.sort()
+        fit_files = np.atleast_1d(fit_files)
+        N = len(fit_files)
+        if N == 0:
+            return False
+        
+        msg = 'Refine model ({0}/{1}): {2} / skip (chinu={3:.1f}, dof={4})'
+        
+        for i, file in enumerate(fit_files):
+            try:
+                hdu = pf.open(file)
+                o_id = hdu[0].header['ID']
+
+                fith = hdu['ZFIT_STACK'].header
+                chinu = fith['CHIMIN']/fith['DOF']
+                if (chinu > max_chinu) | (fith['DOF'] < 10):
+                    print(msg.format(i, N, file, chinu, fith['DOF']))
+                    continue
+
+                sp = utils.GTable(hdu['TEMPL'].data)
+
+                dt = float
+                wave = np.cast[dt](sp['wave'])  # .byteswap()
+                flux = np.cast[dt](sp[spectrum])  # .byteswap()
+                self.grp.compute_single_model(int(o_id), mag=19, size=-1, store=False,
+                                        spectrum_1d=[wave, flux], is_cgs=True,
+                                        get_beams=None, in_place=True)
+                print('Refine model ({0}/{1}): {2}'.format(i, N, file))
+            except Exception as e:
+                print('Refine model ({0}/{1}): {2} / failed {3}'.format(i, N, file, e))
+
+        for f in self.grp.FLTs:
+            f.orig_seg = f.seg
 
     def _create_circular_mask(self, x_c, y_c, radius):
 
@@ -339,7 +393,74 @@ class GrizliExtractor:
         return mask
 
     
-    def set_obj_circ(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1):
+    def set_obj_circ(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
+
+        if not hasattr(self, "seg_img"):
+            raise AttributeError("Segmentation map not set.")
+
+        radius = np.atleast_1d(np.asarray(radius))
+        inner_radius = np.atleast_1d(np.asarray(inner_radius))
+
+        if (ra is not None) & (dec is not None):
+            try:
+                ra = np.atleast_1d(np.asarray(ra))
+                dec = np.atleast_1d(np.asarray(dec))
+                input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
+            except Exception as e:
+                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+            # try:
+
+            print (self.seg_wcs.footprint_contains(input_coords))
+            x_p, y_p = input_coords.to_pixel(self.seg_wcs)
+
+        elif (x is not None) & (y is not None):
+            try:
+                x = np.asarray(x)
+                y = np.asarray(y)
+                input_coords = SkyCoord(x=x, y=y)
+            except Exception as e:
+                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+        else:
+            raise Exception("Coordinate pair not supplied.")
+
+        # print (np.ndim(radius))
+        # print (radius.shape)
+        # print (repr(radius))
+        # print (x_p.shape)
+        # print (len(radius))
+        if radius.shape[0]<x_p.shape[0]:
+            radius = np.array([radius[0]]*x_p.shape[0])
+        if inner_radius.shape[0]<x_p.shape[0]:
+            inner_radius = np.array([inner_radius[0]]*x_p.shape[0])
+        for i, o in zip(inner_radius, radius):
+            if i>=o:
+                print (i, o)
+                raise Exception("Inner radius cannot be greater than outer radius.")
+
+        curr_max = np.nanmax(self.seg_img) + 1
+        obj_ids = curr_max + np.arange(radius.shape[0])
+        for o_i, x_i, y_i, r_i, i_i in zip(obj_ids, x_p, y_p, radius, inner_radius):
+            mask = self._create_circular_mask(x_i,y_i,r_i)
+            if i_i != 0:
+                mask[self._create_circular_mask(x_i,y_i,i_i)] = 0
+            self.seg_img[mask] = o_i
+        # fig, ax = plt.subplots()
+        # ax.imshow(self.seg_img, origin="lower", cmap="plasma")
+        # plt.show()
+
+        return obj_ids
+
+        # try:
+        #     print (in1.dtype)
+        # except:
+        #     print ("no fucking units")
+
+        # try:
+        #     input_coords = SkyCoord(ra, dec)
+        # except Exception as e:
+        #     raise Exception(f"Improper format for coordinates: {e}")
+
+    def segment_split(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
 
         if not hasattr(self, "seg_img"):
             raise AttributeError("Segmentation map not set.")
@@ -377,23 +498,59 @@ class GrizliExtractor:
             radius = np.array([radius[0]]*x_p.shape[0])
 
         curr_max = np.nanmax(self.seg_img) + 1
-        obj_ids = curr_max + np.arange(radius.shape[0])
+        obj_ids = curr_max + np.arange(radius.shape[0], step=int(segments+1))
+
+        used_ids = []
         for o_i, x_i, y_i, r_i in zip(obj_ids, x_p, y_p, radius):
-            self.seg_img[self._create_circular_mask(x_i,y_i,r_i)] = o_i
+
+            orig_id = self.seg_img[int(y_i),int(x_i)]
+            print (orig_id)
+
+            y, x = np.indices(self.seg_img.shape)
+
+            print (x_i, y_i)
+            print (self.seg_img.shape)
+            print (np.nanmax(x), np.nanmax(y))
+
+            angle_arr = (np.rad2deg(np.arctan2(x_i-x, y-y_i))-angle)%360.
+
+            # print (360/segments)
+            for s in np.arange(segments):
+                # print (np.nansum(np.where(
+                #     (self.seg_img==orig_id)
+                #     &(angle_arr>=s*360/segments)
+                #     &(angle_arr<(s+1)*360/segments))))
+                # print (o_i+s)
+                # print (orig_id)
+                self.seg_img[
+                    np.where(
+                        (self.seg_img==orig_id)
+                        &(angle_arr>=s*360/segments)
+                        &(angle_arr<(s+1)*360/segments)
+                    )
+                ] = o_i+s
+                used_ids.append(o_i+s)
+
+            # fig, ax = plt.subplots()
+            # ax.imshow(self.seg_img[3000:3100,1650:1750], origin="lower")
+            # # ax.imshow(angle_arr, origin="lower")
+            # plt.show()
+
+            if r_i != 0:
+                mask = self._create_circular_mask(x_i,y_i,r_i)
+            self.seg_img[mask] = o_i+segments
+            used_ids.append(o_i+segments)
         # fig, ax = plt.subplots()
         # ax.imshow(self.seg_img, origin="lower", cmap="plasma")
         # plt.show()
 
-        return obj_ids
+        return used_ids
 
-        # try:
-        #     print (in1.dtype)
-        # except:
-        #     print ("no fucking units")
+    def very_hacky_shit(self, old_id, new_ids):
 
-        # try:
-        #     input_coords = SkyCoord(ra, dec)
-        # except Exception as e:
-        #     raise Exception(f"Improper format for coordinates: {e}")
+        from copy import deepcopy
 
+        for flt in self.grp.FLTs:
+            for n in np.atleast_1d(new_ids).flatten():
+                flt.object_dispersers[n] = deepcopy(flt.object_dispersers[old_id])
         
