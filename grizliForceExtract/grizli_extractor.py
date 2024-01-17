@@ -15,6 +15,7 @@ import sep
 # from grizliForceExtract.utils_c import sep_fns
 import math
 import time
+from datetime import datetime, timezone 
 import multiprocessing
 from functools import partial
 import shutil
@@ -132,7 +133,7 @@ Steps:
 
 class GrizliExtractor:
 
-    def __init__(self, field_root, in_dir, out_dir):
+    def __init__(self, field_root, in_dir, out_dir, seg_path=None):
 
         self.field_root = field_root
         self.in_dir = Path(in_dir)
@@ -192,18 +193,23 @@ class GrizliExtractor:
         # reload (grizli)
         # print (grizli.GRIZLI_PATH)
 
-    def load_orig_seg_img(self, seg_img_path, ext=0):
+        if seg_path is not None:
+            self.load_orig_seg_map(seg_path)
 
-        seg_img_path = Path(seg_img_path)
 
-        self.seg_name = seg_img_path.name
 
-        shutil.copy(
-            src=seg_img_path,
-            dst=self.out_dir/seg_img_path.with_stem(f"orig_{seg_img_path.stem}")
-        )
+    def load_orig_seg_map(self, seg_path, ext=0):
+
+        seg_path = Path(seg_path)
+
+        self.seg_name = seg_path.name
+
+        # shutil.copy(
+        #     src=seg_img_path,
+        #     dst=self.out_dir/seg_img_path.with_stem(f"orig_{seg_img_path.stem}")
+        # )
         
-        with pf.open(seg_img_path) as hdul:
+        with pf.open(seg_path) as hdul:
             self.seg_img = hdul[ext].data.byteswap().newbyteorder()
             self.seg_hdr = hdul[ext].header
             self.seg_wcs = WCS(self.seg_hdr)
@@ -221,36 +227,47 @@ class GrizliExtractor:
 
         kwargs["get_all_filters"] = kwargs.get("get_all_filters", True)
 
+        now = datetime.now(timezone.utc).strftime(r"%Y%m%dT%H%M%SZ")
+        seg_out_path = self.out_dir / f"{self.seg_name}".replace(".fits", f"-{now}.fits")
+
         self.catalogue = catalogue_fns.regen_multiband_catalogue(
             self.field_root, 
             seg_image=self.seg_img,
             in_dir=self.out_dir,
             out_dir=self.out_dir,
+            seg_out_path=seg_out_path,
             **kwargs,
         )
 
+        self.seg_name = seg_out_path.name
+
         utils.log_comment(
             utils.LOGFILE,
-            "Multiband catalogue complete.",
+            f"Multiband catalogue complete. Segmentation map saved to {self.seg_name}",
             verbose=True,
             show_date=True,
         )
 
     def _modify_FLT_seg(self, flt, seg_file=None):
-        print (flt, seg_file)
+        # print (flt, seg_file)
 
         flt.process_seg_file(seg_file)
 
 
-    def load_contamination_maps(self, detection_filter="ir", pad=800, cpu_count=4, **kwargs):
+    def load_contamination_maps(self, grism_files=None, detection_filter="ir", pad=800, cpu_count=4, **kwargs):
 
         """
         Be careful with the cpu_count - the memory footprint per process is extremely high 
-        (e.g. with an 6P/8E CPU, and 32GB RAM, I typically limit this to <=6 cores).
+        (e.g. with a 6P/8E CPU, and 32GB RAM, I typically limit this to <=6 cores).
 
         """
 
-        grism_files = [str(p) for p in self.out_dir.glob("*GrismFLT.fits")]
+        if grism_files is None:
+            grism_files = [str(p) for p in self.out_dir.glob("*GrismFLT.fits")]
+        else:
+            grism_files = np.atleast_1d(grism_files)
+        if len(grism_files)==0:
+            raise Exception("No grism files found.")
 
         utils.log_comment(
             utils.LOGFILE,
@@ -261,7 +278,7 @@ class GrizliExtractor:
 
         catalog_path = Path(
             kwargs.get(
-                "catalog",
+                "catalog_path",
                 self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits"
             ),
         )
@@ -269,26 +286,33 @@ class GrizliExtractor:
             raise FileNotFoundError(
                 f"Catalogue file not found at the specified location: {catalog_path}."
             )
-        seg_path = Path(
-            kwargs.get(
-                "seg_file",
-                self.out_dir / f"{self.field_root}-{detection_filter}_seg.fits"
-            ),
-        )
-        if not seg_path.is_file():
-            raise FileNotFoundError(
-                f"Segmentation map not found at the specified location: {seg_path}."
-            )
+        seg_path = kwargs.get("seg_path")
+        if seg_path is None and hasattr(self, "seg_name"):
+            seg_path = self.out_dir / self.seg_name
+        if seg_path is not None:
+            if not Path(seg_path).is_file():
+                raise FileNotFoundError(
+                    f"Segmentation map not found at the specified location: {seg_path}."
+                )
+            seg_path = str(seg_path)
 
         self.grp = multifit.GroupFLT(
             cpu_count=cpu_count,
             grism_files=grism_files,
             pad=pad,
-            seg_file=str(seg_path),
+            seg_file=seg_path,
             catalog=str(catalog_path),
         )
 
-    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None, spectrum_1d=None):
+    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None, spectrum_1d=None, is_cgs=True):
+
+        if not hasattr(self, "grp"):
+            raise Exception("GrismFLT files not loaded. Run `load_contamination_maps()' first.")
+        if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
+            raise Exception(
+                "The current segmentation map does not match the one stored in the GrismFLT files."
+                "Run `load_contamination_maps()' before extracting any spectra."
+            )
 
         print("5. Extracting spectra...")
         os.chdir(self.out_dir)
@@ -319,10 +343,10 @@ class GrizliExtractor:
             obj_id_list = [obj_id_list]
 
         for obj_id in tqdm(obj_id_list):
-            if spectrum_1d is not None:
-                beams = FLT_fns.get_beams_with_spectrum(self.grp, obj_id, spectrum_1d=spectrum_1d, **beams_kwargs)
-            else:
-                beams = self.grp.get_beams(obj_id, **beams_kwargs)
+            # if spectrum_1d is not None:
+            beams = FLT_fns.get_beams_with_spectrum(self.grp, obj_id, spectrum_1d=spectrum_1d, is_cgs=is_cgs, **beams_kwargs)
+            # else:
+            #     beams = self.grp.get_beams(obj_id, **beams_kwargs)
 
                 # with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Extractions/nis-wfss_02186.full.fits") as hdul:
                 #     sp = utils.GTable(hdul['TEMPL'].data)

@@ -47,6 +47,7 @@ def make_SEP_catalog(
     seg_image=None,
     in_dir=None,
     out_dir=None,
+    seg_out_path=None,
     **kwargs,
 ):
     """Make a catalog from drizzle products using the SEP implementation of SourceExtractor
@@ -431,12 +432,13 @@ def make_SEP_catalog(
         # Segmentation
         seg_image[mask] = 0
 
-        try:
-            _out_path = out_dir / f"{root}_seg.fits"
-        except:
-            _out_path = f"{root}_seg.fits"
+        if seg_out_path is None:
+            try:
+                seg_out_path = out_dir / f"{root}_seg.fits"
+            except:
+                seg_out_path = f"{root}_seg.fits"
         pf.writeto(
-            _out_path,
+            seg_out_path,
             data=seg_image,
             header=wcs_header, 
             overwrite=True,
@@ -737,6 +739,7 @@ def regen_multiband_catalogue(
     seg_image=None,
     in_dir=None,
     out_dir=None,
+    seg_out_path=None,
 ):
     if in_dir is not None: in_dir = Path(in_dir)
     if detection_params is None:
@@ -793,6 +796,7 @@ def regen_multiband_catalogue(
         seg_image=seg_image,
         in_dir=in_dir,
         out_dir=out_dir,
+        seg_out_path=seg_out_path,
     )
 
     cat_pixel_scale = tab.meta['asec_0'][0]/tab.meta['aper_0'][0]
