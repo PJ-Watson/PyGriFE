@@ -802,7 +802,10 @@ def regen_multiband_catalogue(
     cat_pixel_scale = tab.meta['asec_0'][0]/tab.meta['aper_0'][0]
 
     if aper_segmask:
-        seg_data = pf.open(out_dir / f'{detection_root}_seg.fits')[0].data
+        if seg_out_path is not None:
+            seg_data = pf.open(seg_out_path)[0].data
+        else:
+            seg_data = pf.open(out_dir / f'{detection_root}_seg.fits')[0].data
         seg_data = np.cast[np.int32](seg_data)
 
         aseg, aseg_id = seg_data, tab['NUMBER']

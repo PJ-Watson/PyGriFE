@@ -71,7 +71,7 @@ except:
     """)
 
 import grizli
-from grizli import utils, prep, jwst_utils, multifit, fitting
+from grizli import utils, prep, jwst_utils, multifit, fitting, model
 from grizli.pipeline import auto_script, photoz
 import eazy
 
@@ -89,6 +89,8 @@ extended_translate = {
 }
 
 multifit._loadFLT = FLT_fns.load_and_mod_FLT
+model.GrismFLT.transform_JWST_WFSS = FLT_fns.mod_transform_JWST_WFSS
+model.GrismFLT.compute_model_orders = FLT_fns.mod_compute_model_orders
 
 # photoz.FILTER_TRANS = extended_translate
 # photoz.eazy_photoz = partial(photoz.eazy_photoz, filter_trans=extended_translate)
@@ -249,7 +251,6 @@ class GrizliExtractor:
         )
 
     def _modify_FLT_seg(self, flt, seg_file=None):
-        # print (flt, seg_file)
 
         flt.process_seg_file(seg_file)
 
@@ -310,11 +311,18 @@ class GrizliExtractor:
             raise Exception("GrismFLT files not loaded. Run `load_contamination_maps()' first.")
         if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
             raise Exception(
-                "The current segmentation map does not match the one stored in the GrismFLT files."
-                "Run `load_contamination_maps()' before extracting any spectra."
+                f"The current segmentation map ({self.seg_name}) does not match the"
+                f"one stored in the GrismFLT files ({Path(self.grp.FLTs[0].seg_file).name})."
+                "Run `load_contamination_maps()' before extracting any spectra, or load "
+                "the correct segmentation map."
             )
-
-        print("5. Extracting spectra...")
+            
+        utils.log_comment(
+            utils.LOGFILE,
+            f"Generating fit parameters.",
+            verbose=True,
+            show_date=True,
+        )
         os.chdir(self.out_dir)
         pline = {"kernel": "square", "pixfrac": 1.0, "pixscale": 0.03, "size": 8, "wcs": None}
         args = auto_script.generate_fit_params(
@@ -328,7 +336,7 @@ class GrizliExtractor:
         
         if beams_kwargs is None:
             beams_kwargs = {}
-        beams_kwargs["size"] = beams_kwargs.get("size", 75)
+        beams_kwargs["size"] = beams_kwargs.get("size", -1)
         beams_kwargs["min_mask"] = beams_kwargs.get("min_mask", 0.)
         beams_kwargs["min_sens"] = beams_kwargs.get("min_sens", 0.)
         beams_kwargs["show_exception"] = beams_kwargs.get("show_exception", True)
@@ -362,8 +370,13 @@ class GrizliExtractor:
             mb.write_master_fits()
             _ = fitting.run_all_parallel(
                 obj_id, zr=z_range, verbose=True, get_output_data=True,
-            )
-        print("5. Extracting spectra...[COMPLETE]")
+            )        
+        utils.log_comment(
+            utils.LOGFILE,
+            f"Finished extracting spectra.",
+            verbose=True,
+            show_date=True,
+        )
 
     def refine_contam_model_with_fits(self, spectrum="full", max_chinu=5, fit_files=None):
         """
@@ -397,6 +410,13 @@ class GrizliExtractor:
                 dt = float
                 wave = np.cast[dt](sp['wave'])  # .byteswap()
                 flux = np.cast[dt](sp[spectrum])  # .byteswap()
+                for flt in self.grp.FLTs:
+                    if int(o_id) not in flt.object_dispersers:
+                        old_obj_ids = np.unique(flt.orig_seg[flt.seg==o_id])
+                        old_obj_ids = old_obj_ids.ravel()[np.flatnonzero(old_obj_ids)].astype(int)
+                        print (flt.conf.beams)
+                        # print (f"beam_in old obj ids {old_obj_ids}")
+                    print ("IN DISPERSERS?", int(o_id) in flt.object_dispersers)
                 self.grp.compute_single_model(int(o_id), mag=19, size=-1, store=False,
                                         spectrum_1d=[wave, flux], is_cgs=True,
                                         get_beams=None, in_place=True)
@@ -406,6 +426,7 @@ class GrizliExtractor:
 
         for f in self.grp.FLTs:
             f.orig_seg = f.seg
+            f.orig_seg_file = f.seg_file
 
     def _create_circular_mask(self, x_c, y_c, radius):
 
@@ -447,11 +468,6 @@ class GrizliExtractor:
         else:
             raise Exception("Coordinate pair not supplied.")
 
-        # print (np.ndim(radius))
-        # print (radius.shape)
-        # print (repr(radius))
-        # print (x_p.shape)
-        # print (len(radius))
         if radius.shape[0]<x_p.shape[0]:
             radius = np.array([radius[0]]*x_p.shape[0])
         if inner_radius.shape[0]<x_p.shape[0]:
@@ -468,21 +484,8 @@ class GrizliExtractor:
             if i_i != 0:
                 mask[self._create_circular_mask(x_i,y_i,i_i)] = 0
             self.seg_img[mask] = o_i
-        # fig, ax = plt.subplots()
-        # ax.imshow(self.seg_img, origin="lower", cmap="plasma")
-        # plt.show()
 
         return obj_ids
-
-        # try:
-        #     print (in1.dtype)
-        # except:
-        #     print ("no fucking units")
-
-        # try:
-        #     input_coords = SkyCoord(ra, dec)
-        # except Exception as e:
-        #     raise Exception(f"Improper format for coordinates: {e}")
 
     def segment_split(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
 
@@ -498,9 +501,7 @@ class GrizliExtractor:
                 input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
             except Exception as e:
                 raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-            # try:
-
-            print (self.seg_wcs.footprint_contains(input_coords))
+                
             x_p, y_p = input_coords.to_pixel(self.seg_wcs)
 
         elif (x is not None) & (y is not None):
@@ -528,24 +529,12 @@ class GrizliExtractor:
         for o_i, x_i, y_i, r_i in zip(obj_ids, x_p, y_p, radius):
 
             orig_id = self.seg_img[int(y_i),int(x_i)]
-            print (orig_id)
 
             y, x = np.indices(self.seg_img.shape)
 
-            print (x_i, y_i)
-            print (self.seg_img.shape)
-            print (np.nanmax(x), np.nanmax(y))
-
             angle_arr = (np.rad2deg(np.arctan2(x_i-x, y-y_i))-angle)%360.
 
-            # print (360/segments)
             for s in np.arange(segments):
-                # print (np.nansum(np.where(
-                #     (self.seg_img==orig_id)
-                #     &(angle_arr>=s*360/segments)
-                #     &(angle_arr<(s+1)*360/segments))))
-                # print (o_i+s)
-                # print (orig_id)
                 self.seg_img[
                     np.where(
                         (self.seg_img==orig_id)
@@ -554,19 +543,10 @@ class GrizliExtractor:
                     )
                 ] = o_i+s
                 used_ids.append(o_i+s)
-
-            # fig, ax = plt.subplots()
-            # ax.imshow(self.seg_img[3000:3100,1650:1750], origin="lower")
-            # # ax.imshow(angle_arr, origin="lower")
-            # plt.show()
-
             if r_i != 0:
                 mask = self._create_circular_mask(x_i,y_i,r_i)
             self.seg_img[mask] = o_i+segments
             used_ids.append(o_i+segments)
-        # fig, ax = plt.subplots()
-        # ax.imshow(self.seg_img, origin="lower", cmap="plasma")
-        # plt.show()
 
         return used_ids
 
