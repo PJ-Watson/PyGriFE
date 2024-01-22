@@ -230,7 +230,17 @@ class GrizliExtractor:
         kwargs["get_all_filters"] = kwargs.get("get_all_filters", True)
 
         now = datetime.now(timezone.utc).strftime(r"%Y%m%dT%H%M%SZ")
-        seg_out_path = self.out_dir / f"{self.seg_name}".replace(".fits", f"-{now}.fits")
+
+        try:
+            end_string = self.seg_name.split("-")[-1].split(".")[0]
+            test = datetime.strptime(end_string, r"%Y%m%dT%H%M%SZ")
+            if type(test) == datetime:
+                self.seg_name = self.seg_name.replace(end_string,now)
+        except:
+
+            self.seg_name = self.seg_name.replace(".fits", f"-{now}.fits")
+        
+        seg_out_path = self.out_dir / self.seg_name
 
         self.catalogue = catalogue_fns.regen_multiband_catalogue(
             self.field_root, 
@@ -240,8 +250,6 @@ class GrizliExtractor:
             seg_out_path=seg_out_path,
             **kwargs,
         )
-
-        self.seg_name = seg_out_path.name
 
         utils.log_comment(
             utils.LOGFILE,
@@ -312,7 +320,7 @@ class GrizliExtractor:
         if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
             raise Exception(
                 f"The current segmentation map ({self.seg_name}) does not match the"
-                f"one stored in the GrismFLT files ({Path(self.grp.FLTs[0].seg_file).name})."
+                f"name stored in the GrismFLT files ({Path(self.grp.FLTs[0].seg_file).name})."
                 "Run `load_contamination_maps()' before extracting any spectra, or load "
                 "the correct segmentation map."
             )
@@ -351,22 +359,9 @@ class GrizliExtractor:
             obj_id_list = [obj_id_list]
 
         for obj_id in tqdm(obj_id_list):
-            # if spectrum_1d is not None:
             beams = FLT_fns.get_beams_with_spectrum(self.grp, obj_id, spectrum_1d=spectrum_1d, is_cgs=is_cgs, **beams_kwargs)
-            # else:
-            #     beams = self.grp.get_beams(obj_id, **beams_kwargs)
-
-                # with pf.open("/media/sharedData/data/2023_11_07_spectral_orders/Extractions/nis-wfss_02186.full.fits") as hdul:
-                #     sp = utils.GTable(hdul['TEMPL'].data)
-                #     dt = float
-                #     wave = np.cast[dt](sp['wave'])  # .byteswap()
-                #     flux = np.cast[dt](sp["full"])  # .byteswap()
-                #     flux /= (np.nansum(hdul["DSCI"].data)*1e-19)
-                #     print ("DIRECT_SUM:", np.nansum(hdul["DSCI"].data)*1e-19)
 
             mb = multifit.MultiBeam(beams, group_name=self.field_root, **multibeam_kwargs)
-            #     _ = mb.oned_figure()
-            #     _ = mb.drizzle_grisms_and_PAs(size=32, scale=0.5, diff=False)
             mb.write_master_fits()
             _ = fitting.run_all_parallel(
                 obj_id, zr=z_range, verbose=True, get_output_data=True,
@@ -414,9 +409,6 @@ class GrizliExtractor:
                     if int(o_id) not in flt.object_dispersers:
                         old_obj_ids = np.unique(flt.orig_seg[flt.seg==o_id])
                         old_obj_ids = old_obj_ids.ravel()[np.flatnonzero(old_obj_ids)].astype(int)
-                        print (flt.conf.beams)
-                        # print (f"beam_in old obj ids {old_obj_ids}")
-                    print ("IN DISPERSERS?", int(o_id) in flt.object_dispersers)
                 self.grp.compute_single_model(int(o_id), mag=19, size=-1, store=False,
                                         spectrum_1d=[wave, flux], is_cgs=True,
                                         get_beams=None, in_place=True)
@@ -428,6 +420,7 @@ class GrizliExtractor:
             f.orig_seg = f.seg
             f.orig_seg_file = f.seg_file
 
+
     def _create_circular_mask(self, x_c, y_c, radius):
 
         Y, X = np.ogrid[:self.seg_img.shape[0], :self.seg_img.shape[1]]
@@ -436,9 +429,8 @@ class GrizliExtractor:
 
         mask = sqrd_dist <= radius**2
         return mask
-
     
-    def set_obj_circ(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
+    def add_circ_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
 
         if not hasattr(self, "seg_img"):
             raise AttributeError("Segmentation map not set.")
@@ -453,9 +445,8 @@ class GrizliExtractor:
                 input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
             except Exception as e:
                 raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-            # try:
-
-            print (self.seg_wcs.footprint_contains(input_coords))
+            if not self.seg_wcs.footprint_contains(input_coords):
+                raise Exception(f"Supplied coordinates are outside the segmentation map footprint.")
             x_p, y_p = input_coords.to_pixel(self.seg_wcs)
 
         elif (x is not None) & (y is not None):
@@ -487,7 +478,7 @@ class GrizliExtractor:
 
         return obj_ids
 
-    def segment_split(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
+    def add_segment_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
 
         if not hasattr(self, "seg_img"):
             raise AttributeError("Segmentation map not set.")
@@ -514,11 +505,6 @@ class GrizliExtractor:
         else:
             raise Exception("Coordinate pair not supplied.")
 
-        # print (np.ndim(radius))
-        # print (radius.shape)
-        # print (repr(radius))
-        # print (x_p.shape)
-        # print (len(radius))
         if radius.shape[0]<x_p.shape[0]:
             radius = np.array([radius[0]]*x_p.shape[0])
 
@@ -549,12 +535,4 @@ class GrizliExtractor:
             used_ids.append(o_i+segments)
 
         return used_ids
-
-    def very_hacky_shit(self, old_id, new_ids):
-
-        from copy import deepcopy
-
-        for flt in self.grp.FLTs:
-            for n in np.atleast_1d(new_ids).flatten():
-                flt.object_dispersers[n] = deepcopy(flt.object_dispersers[old_id])
         
