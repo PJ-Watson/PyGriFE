@@ -3,6 +3,11 @@ import os
 import glob
 import numpy as np
 import astropy.io.fits as pf
+import astropy
+import warnings
+import numpy.typing as npt
+from typing import Optional, Any
+from collections.abc import Iterable
 from astropy.wcs import WCS
 import matplotlib.pyplot as plt
 from importlib.metadata import version
@@ -217,6 +222,16 @@ class GrizliExtractor:
             self.seg_wcs = WCS(self.seg_hdr)
 
     def regen_multiband_catalogue(self, **kwargs):
+        """
+        Regenerate the grizli multiband catalogue, for the current segmentation map.
+        
+        Parameters
+        ----------
+        **kwargs : dict, optional
+            Keyword arguments are passed through to 
+            `~grizli_functions.catalogue_fns.regen_multiband_catalogue()`.
+
+        """
 
         utils.log_comment(
             utils.LOGFILE,
@@ -258,18 +273,13 @@ class GrizliExtractor:
             show_date=True,
         )
 
-    def _modify_FLT_seg(self, flt, seg_file=None):
-
-        flt.process_seg_file(seg_file)
-
-
     def load_contamination_maps(self, grism_files=None, detection_filter="ir", pad=800, cpu_count=4, **kwargs):
 
-        """
+        '''
         Be careful with the cpu_count - the memory footprint per process is extremely high 
         (e.g. with a 6P/8E CPU, and 32GB RAM, I typically limit this to <=6 cores).
 
-        """
+        '''
 
         if grism_files is None:
             grism_files = [str(p) for p in self.out_dir.glob("*GrismFLT.fits")]
@@ -313,7 +323,27 @@ class GrizliExtractor:
             catalog=str(catalog_path),
         )
 
-    def extract_spectra(self, obj_id_list, z_range=[0.25,0.35], beams_kwargs=None, multibeam_kwargs=None, spectrum_1d=None, is_cgs=True):
+    def extract_spectra(self, obj_id_list: npt.ArrayLike, z_range: npt.ArrayLike = [0., 0.5], beams_kwargs: dict[str, Any] | None = None, multibeam_kwargs: dict[str, Any] | None = None, spectrum_1d: npt.ArrayLike | None = None, is_cgs: bool = True):
+        """
+        Perform a full extraction of the specified objects.
+
+        Parameters
+        ----------
+        obj_id_list : array_like
+            The object ids in the segmentation map which will be extracted.
+        z_range : array_like, optional
+            The redshift range to consider for the extraction, by default 0 < z < 0.5
+        beams_kwargs : dict, optional
+            Keyword arguments to pass to grizli.multifit.GroupFLT.get_beams()
+        multibeam_kwargs : dict, optional
+            Keyword arguments to pass to grizli.multifit.MultiBeam()
+        spectrum_1d : [wavelengths, flux], optional
+            The flux spectrum and corresponding wavelengths of the object in the model.
+            By default, this is calculated automatically from the stored object_dispersers.
+        is_cgs : bool, optional
+            The flux units of `spectrum_1d[1]` are cgs f_lambda flux densities,
+            rather than normalised in the detection band, by default True.
+        """
 
         if not hasattr(self, "grp"):
             raise Exception("GrismFLT files not loaded. Run `load_contamination_maps()' first.")
@@ -355,10 +385,11 @@ class GrizliExtractor:
         multibeam_kwargs["min_mask"] = multibeam_kwargs.get("min_mask", 0.)
         multibeam_kwargs["min_sens"] = multibeam_kwargs.get("min_sens", 0.)
 
-        if not hasattr(obj_id_list, '__iter__'):
-            obj_id_list = [obj_id_list]
+        # if not hasattr(obj_id_list, '__iter__'):
+        #     obj_id_list = [obj_id_list]
+        obj_id_arr = np.atleast_1d(obj_id_list).flatten()
 
-        for obj_id in tqdm(obj_id_list):
+        for obj_id in tqdm(obj_id_arr):
             beams = FLT_fns.get_beams_with_spectrum(self.grp, obj_id, spectrum_1d=spectrum_1d, is_cgs=is_cgs, **beams_kwargs)
 
             mb = multifit.MultiBeam(beams, group_name=self.field_root, **multibeam_kwargs)
@@ -373,23 +404,40 @@ class GrizliExtractor:
             show_date=True,
         )
 
-    def refine_contam_model_with_fits(self, spectrum="full", max_chinu=5, fit_files=None):
+    def refine_contam_model_with_fits(self, spectrum: str = "full", max_chinu: int | float = 5, 
+        fit_files: list[str] | list[os.PathLike] | None = None) -> bool:
         """
         Refine the full-field grism models with the best fit spectra from 
-        individual extractions.
+        individual extractions. [Modified version of a grizli function]
+
+        Parameters
+        ----------
+        spectrum : str, optional
+            The component of the best-fit spectrum to use, either `full' or `continuum'.
+        max_chinu : int | float, optional
+            The maximum reduced chi-squared value of the fit to accept, in order to 
+            refine the contamination model with the resulting spectrum, by default 5.
+        fit_files : list[str] | list[os.PathLike] | None, optional
+            An explicit list of the best-fit files to use. By default, all 
+            `*full.fits' files in the current directory will be used.
+
+        Returns
+        -------
+        status : bool
+            Returns False if the contamination maps are not modified.
         """
 
         if fit_files is None:
             fit_files = glob.glob('*full.fits')
             fit_files.sort()
-        fit_files = np.atleast_1d(fit_files)
-        N = len(fit_files)
+        fit_files_arr = np.atleast_1d(np.asarray(fit_files))
+        N = fit_files_arr.shape[0]
         if N == 0:
             return False
         
         msg = 'Refine model ({0}/{1}): {2} / skip (chinu={3:.1f}, dof={4})'
         
-        for i, file in enumerate(fit_files):
+        for i, file in enumerate(fit_files_arr):
             try:
                 hdu = pf.open(file)
                 o_id = hdu[0].header['ID']
@@ -402,9 +450,8 @@ class GrizliExtractor:
 
                 sp = utils.GTable(hdu['TEMPL'].data)
 
-                dt = float
-                wave = np.cast[dt](sp['wave'])  # .byteswap()
-                flux = np.cast[dt](sp[spectrum])  # .byteswap()
+                wave = np.cast[float](sp['wave'])  # .byteswap()
+                flux = np.cast[float](sp[spectrum])  # .byteswap()
                 for flt in self.grp.FLTs:
                     if int(o_id) not in flt.object_dispersers:
                         old_obj_ids = np.unique(flt.orig_seg[flt.seg==o_id])
@@ -420,8 +467,29 @@ class GrizliExtractor:
             f.orig_seg = f.seg
             f.orig_seg_file = f.seg_file
 
+        return True
 
-    def _create_circular_mask(self, x_c, y_c, radius):
+
+    def _create_circular_mask(self, x_c: float, y_c: float, radius: float) -> npt.NDArray[np.bool_]:
+        """
+        Create a boolean mask of all elements in the segmentation map within 
+        a specified distance of a point.
+
+        Parameters
+        ----------
+        x_c : float
+            The x-coordinate of the reference point.
+        y_c : float
+            The y-coordinate of the reference point.
+        radius : float
+            The maximum radius allowed.
+
+        Returns
+        -------
+        mask : ndarray, bool
+            The mask, where elements are True if the distance to 
+            (x_c, y_c) is less than or equal to radius.
+        """
 
         Y, X = np.ogrid[:self.seg_img.shape[0], :self.seg_img.shape[1]]
 
@@ -429,54 +497,149 @@ class GrizliExtractor:
 
         mask = sqrd_dist <= radius**2
         return mask
-    
-    def add_circ_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
+
+    def add_circ_obj(self, radius: astropy.units.Quantity | float | Iterable[astropy.units.Quantity | float] = 3*u.arcsec, 
+        inner_radius: astropy.units.Quantity | float | Iterable[astropy.units.Quantity | float] = 0, 
+        centre: astropy.coordinates.SkyCoord = None, **skycoord_kwargs):
+
+        """
+        Add one or more circular objects to the segmentation map.
+
+        Parameters
+        ----------
+        radius : astropy.units.Quantity | float | Iterable[astropy.units.Quantity  |  float], optional
+            The outer radius of the aperture, by default 3 arcseconds.
+        inner_radius : astropy.units.Quantity | float | Iterable[astropy.units.Quantity  |  float], optional
+            The inner radius, if specified, creates an annulus instead of an aperture.
+        centre : astropy.coordinates.SkyCoord, optional
+            The centre of the aperture.
+        **skycoord_kwargs : dict, optional
+            Any inputs accepted by astropy.coordinates.SkyCoord, if skycoords is None.
+
+        Returns
+        -------
+        new_obj_id : int
+            The id corresponding to the new object in the segmentation map.
+        """
 
         if not hasattr(self, "seg_img"):
             raise AttributeError("Segmentation map not set.")
 
-        radius = np.atleast_1d(np.asarray(radius))
-        inner_radius = np.atleast_1d(np.asarray(inner_radius))
-
-        if (ra is not None) & (dec is not None):
+        if centre is None:
             try:
-                ra = np.atleast_1d(np.asarray(ra))
-                dec = np.atleast_1d(np.asarray(dec))
-                input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
+                centre = SkyCoord(**skycoord_kwargs)
             except Exception as e:
-                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-            if not self.seg_wcs.footprint_contains(input_coords):
-                raise Exception(f"Supplied coordinates are outside the segmentation map footprint.")
-            x_p, y_p = input_coords.to_pixel(self.seg_wcs)
+                raise Exception(f"Could not parse supplied arguments as on-sky coordinates: {e}")
 
-        elif (x is not None) & (y is not None):
+        centre = np.atleast_1d(centre).flatten()
+        outer_radius = np.atleast_1d(radius).flatten()
+        inner_radius = np.atleast_1d(inner_radius).flatten()
+
+        for r in [inner_radius, outer_radius]:
+            if (r.shape[0]>1) and (r.shape[0] != centre.shape[0]):
+                raise ValueError(
+                    f"Size of inputs do not match. {centre.shape[0]}"
+                    f" coordinates and {r.shape[0]} radii have been supplied."
+                )
+
+        if (inner_radius.shape[0]==1) and (centre.shape[0]>1):
             try:
-                x = np.asarray(x)
-                y = np.asarray(y)
-                input_coords = SkyCoord(x=x, y=y)
-            except Exception as e:
-                raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-        else:
-            raise Exception("Coordinate pair not supplied.")
+                inner_radius = np.tile(inner_radius.value,centre.shape[0])*inner_radius.unit
+            except:
+                inner_radius = np.tile(inner_radius, centre.shape[0])
+        if (outer_radius.shape[0]==1) and (centre.shape[0]>1):
+            try:
+                outer_radius = np.tile(outer_radius.value,centre.shape[0])*outer_radius.unit
+            except:
+                outer_radius = np.tile(outer_radius, centre.shape[0])
 
-        if radius.shape[0]<x_p.shape[0]:
-            radius = np.array([radius[0]]*x_p.shape[0])
-        if inner_radius.shape[0]<x_p.shape[0]:
-            inner_radius = np.array([inner_radius[0]]*x_p.shape[0])
-        for i, o in zip(inner_radius, radius):
+        for i, o in zip(inner_radius, outer_radius):
             if i>=o:
-                print (i, o)
-                raise Exception("Inner radius cannot be greater than outer radius.")
+                raise ValueError("Inner radius cannot be greater than outer radius.")
+
+        contained = np.asarray([self.seg_wcs.footprint_contains(c) for c in centre])
+        if not all(contained):
+            warnings.warn(
+                f"The following coordinates are outside the segmentation map footprint, "
+                f"and will be skipped: {centre[~contained].to_string()}",
+            )
+        xs, ys = centre[contained].to_pixel(self.seg_wcs)
+        
+        inner_radius, outer_radius = inner_radius[contained], outer_radius[contained]
+
+        radii = np.zeros((xs.shape[0], 2))
+        pix_scale = np.nanmean(
+            [d.value for d in self.seg_wcs.proj_plane_pixel_scales()]
+        ) * self.seg_wcs.proj_plane_pixel_scales()[0].unit /u.pix
+        for n in range(xs.shape[0]):
+            for i, r in enumerate([inner_radius[n], outer_radius[n]]):
+                if isinstance(r, u.Quantity):
+                    if u.get_physical_type(r)=="angle":
+                        radii[n, i] = (r / pix_scale).to(u.pix).value
+                    else:
+                        radii[n, i] = r.value
+                else:
+                    radii[n, i] = r
 
         curr_max = np.nanmax(self.seg_img) + 1
-        obj_ids = curr_max + np.arange(radius.shape[0])
-        for o_i, x_i, y_i, r_i, i_i in zip(obj_ids, x_p, y_p, radius, inner_radius):
-            mask = self._create_circular_mask(x_i,y_i,r_i)
-            if i_i != 0:
-                mask[self._create_circular_mask(x_i,y_i,i_i)] = 0
-            self.seg_img[mask] = o_i
+        new_obj_ids = curr_max + np.arange(xs.shape[0])
+        for new_id, x_c, y_c, rads in zip(new_obj_ids, xs, ys, radii):
+            mask = self._create_circular_mask(x_c, y_c, rads[1])
+            if rads[0] != 0:
+                mask[self._create_circular_mask(x_c, y_c, rads[0])] = 0
+            self.seg_img[mask] = new_id
 
-        return obj_ids
+        return new_obj_ids
+            
+
+    
+    # def add_circ_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
+
+    #     if not hasattr(self, "seg_img"):
+    #         raise AttributeError("Segmentation map not set.")
+
+    #     radius = np.atleast_1d(np.asarray(radius))
+    #     inner_radius = np.atleast_1d(np.asarray(inner_radius))
+
+    #     if (ra is not None) & (dec is not None):
+    #         try:
+    #             ra = np.atleast_1d(np.asarray(ra))
+    #             dec = np.atleast_1d(np.asarray(dec))
+    #             input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
+    #         except Exception as e:
+    #             raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+    #         if not self.seg_wcs.footprint_contains(input_coords):
+    #             raise Exception(f"Supplied coordinates are outside the segmentation map footprint.")
+    #         x_p, y_p = input_coords.to_pixel(self.seg_wcs)
+
+    #     elif (x is not None) & (y is not None):
+    #         try:
+    #             x = np.asarray(x)
+    #             y = np.asarray(y)
+    #             input_coords = SkyCoord(x=x, y=y)
+    #         except Exception as e:
+    #             raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
+    #     else:
+    #         raise Exception("Coordinate pair not supplied.")
+
+    #     if radius.shape[0]<x_p.shape[0]:
+    #         radius = np.array([radius[0]]*x_p.shape[0])
+    #     if inner_radius.shape[0]<x_p.shape[0]:
+    #         inner_radius = np.array([inner_radius[0]]*x_p.shape[0])
+    #     for i, o in zip(inner_radius, radius):
+    #         if i>=o:
+    #             print (i, o)
+    #             raise Exception("Inner radius cannot be greater than outer radius.")
+
+    #     curr_max = np.nanmax(self.seg_img) + 1
+    #     obj_ids = curr_max + np.arange(radius.shape[0])
+    #     for o_i, x_i, y_i, r_i, i_i in zip(obj_ids, x_p, y_p, radius, inner_radius):
+    #         mask = self._create_circular_mask(x_i,y_i,r_i)
+    #         if i_i != 0:
+    #             mask[self._create_circular_mask(x_i,y_i,i_i)] = 0
+    #         self.seg_img[mask] = o_i
+
+    #     return obj_ids
 
     def add_segment_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
 
@@ -536,7 +699,37 @@ class GrizliExtractor:
 
         return used_ids
         
-    def add_reg_obj(self, reg_path, format=None, reg_wcs=None):
+    def add_reg_obj(self, reg_path: str | os.PathLike, format: str | None = None, reg_wcs: astropy.wcs.WCS | None = None) -> int:
+
+        """
+        Read a regions file, and add the relevant region to the 
+        segmentation map as a new object.
+
+        Parameters
+        ----------
+        reg_path : str | os.PathLike
+            The path pointing to the region
+        format : str | None, optional
+            The file format specifier. If None, the format is 
+            automatically inferred from the file extension.
+        reg_wcs : astropy.wcs.WCS | None, optional
+            The WCS to use to convert pixels to world coordinates. 
+            By default, the segmentation map WCS will be used.
+
+        Returns
+        -------
+        new_obj_id : int
+            The id corresponding to the new object in the segmentation map.
+
+        Raises
+        ------
+        AttributeError
+            If the segmentation map has not been loaded.
+        ImportError
+            If the regions package is not available.
+        Exception
+            If the supplied regions file cannot be read.
+        """
 
         if not hasattr(self, "seg_img"):
             raise AttributeError("Segmentation map not set.")
