@@ -536,3 +536,36 @@ class GrizliExtractor:
 
         return used_ids
         
+    def add_reg_obj(self, reg_path, format=None, reg_wcs=None):
+
+        if not hasattr(self, "seg_img"):
+            raise AttributeError("Segmentation map not set.")
+
+        try:
+            from regions import Regions, SkyRegion
+        except:
+            raise ImportError(
+                "Astropy Regions is required to import region files."
+                "Please read https://astropy-regions.readthedocs.io for more information."
+            )
+        
+        try:
+            region = Regions.read(reg_path, format=format).regions[0]
+        except Exception as e:
+            raise Exception(
+                f"Could not parse regions file, with the following error: {e}"
+            )
+        
+        if issubclass(type(region), SkyRegion):
+            pixel_region = region.to_pixel(self.seg_wcs if reg_wcs is None else reg_wcs)
+        else:
+            pixel_region = region
+        
+        mask = pixel_region.to_mask(mode="subpixels")
+
+        matched_mask = mask.to_image(self.seg_img.shape) > 0.5
+
+        new_obj_id = np.nanmax(self.seg_img)+1
+        self.seg_img[matched_mask] = new_obj_id
+
+        return new_obj_id
