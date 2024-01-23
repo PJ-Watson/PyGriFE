@@ -1,29 +1,54 @@
+import json
 import sys
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSlider, QLabel, QComboBox, QColorDialog, QFrame, QCheckBox, QFileDialog, QPushButton, QFormLayout, QLineEdit
-from PyQt6.QtGui import QPalette, QColor, QImage, QPixmap, QPainter
+import time
+
 # from .QtImageViewer import QtImageViewer
 from pathlib import Path
-import astropy.io.fits as pf
-from astropy.visualization import (LogStretch, AsinhStretch, ManualInterval, SqrtStretch, LinearStretch)
-from astropy import wcs
-import qimage2ndarray
-import numpy as np
-import time
-import sys
-import json
 from queue import Queue
 
-from seg_map_viewer import SegMapViewer, Separator, FilesWindow, cQLineEdit
+import astropy.io.fits as pf
+import numpy as np
+import qimage2ndarray
+from astropy import wcs
+from astropy.visualization import (
+    AsinhStretch,
+    LinearStretch,
+    LogStretch,
+    ManualInterval,
+    SqrtStretch,
+)
 from grizli_extractor import GrizliExtractor
-from qt_utils import TerminalWindow, WriteStream, Worker
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QImage, QPainter, QPalette, QPixmap
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
+from qt_utils import TerminalWindow, Worker, WriteStream
+from seg_map_viewer import FilesWindow, SegMapViewer, Separator, cQLineEdit
+
 
 class GrizliGUI(SegMapViewer):
-    def __init__(self, new_directory="ForcedExtractions", filters=["F115W", "F150W", "F200W"]):
+    def __init__(
+        self, new_directory="ForcedExtractions", filters=["F115W", "F150W", "F200W"]
+    ):
         super().__init__()
 
         self.layout_side.addWidget(Separator())
-        self.extract_object_button = QPushButton('Extract Object', self)
+        self.extract_object_button = QPushButton("Extract Object", self)
         self.extract_object_button.clicked.connect(self.extraction_handler)
         self.layout_side.addWidget(self.extract_object_button)
 
@@ -36,21 +61,18 @@ class GrizliGUI(SegMapViewer):
         self.ge = None
 
     def open_files_window(self, event=None):
-
         if self.files_window is None:
             self.files_window = GrizliFilesWindow(self)
         self.files_window.show()
 
     def open_terminal_window(self, event=None):
-
         if self.terminal_window is None:
             self.terminal_window = TerminalWindow(self)
         self.terminal_window.show()
 
     def save_output(self, event=None):
-
         if not (hasattr(self, "seg_img_path") and hasattr(self, "seg_data")):
-            print ("No segmentation mask loaded.")
+            print("No segmentation mask loaded.")
             return
 
         self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
@@ -60,20 +82,17 @@ class GrizliGUI(SegMapViewer):
             json.dump(self.remapped_ids, f)
 
         with pf.open(self.seg_img_path) as seg_hdul:
-            
-            seg_hdul[0].data = self.seg_data[::-1,:]
+            seg_hdul[0].data = self.seg_data[::-1, :]
 
             seg_hdul.writeto(self.new_dir_path / self.seg_img_path.name, overwrite=True)
 
     def receiver_fn(self, queue, progress_callback=None):
-
         while self.extract_in_progress:
             text = queue.get()
             progress_callback.emit(text)
         return
 
     def extraction_handler(self, event=None):
-
         self.extract_in_progress = True
         self.extract_object_button.setEnabled(False)
         self.open_terminal_window()
@@ -100,7 +119,6 @@ class GrizliGUI(SegMapViewer):
         sys.stdout = sys.__stdout__
 
     def extract_object(self, event=None, progress_callback=None):
-
         # import logging
         # root = logging.getLogger()
         # root.setLevel(logging.INFO)
@@ -108,18 +126,18 @@ class GrizliGUI(SegMapViewer):
         # fh.setLevel(logging.INFO)
 
         # old_stdout = sys.stdout    # in case you want to restore later
-        # sys.stdout = fh.stream  
+        # sys.stdout = fh.stream
 
         # root.addHandler(fh)
-        print ("Beginning extraction.")
-        print (self.selected_ids)
+        print("Beginning extraction.")
+        print(self.selected_ids)
 
         self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
         self.new_dir_path.mkdir(exist_ok=True, parents=True)
 
         if self.ge is None:
             self.ge = GrizliExtractor(self.field_name, self.prep_dir, self.new_dir_path)
-        self.ge.load_seg_img(self.seg_data[::-1,:])
+        self.ge.load_seg_img(self.seg_data[::-1, :])
         self.ge.regen_multiband_catalogue()
         if not hasattr(self.ge, "grp"):
             self.ge.load_contamination_maps()
@@ -137,8 +155,7 @@ class GrizliFilesWindow(FilesWindow):
         self.sub_layout.insertRow(0, "Prep Directory", self.prep_dir_line)
 
     def change_directory(self, event=None):
-
-        if self.prep_dir_line.text() is None or self.prep_dir_line.text()=="":
+        if self.prep_dir_line.text() is None or self.prep_dir_line.text() == "":
             if self.root.prep_dir is not None:
                 init = str(prep_dir)
             elif self.recent_dir is None:
@@ -157,20 +174,32 @@ class GrizliFilesWindow(FilesWindow):
 
         try:
             self.seg_line.setText(str([*self.root.prep_dir.glob("*ir_seg.fits")][0]))
-            self.root.field_name =  ([*self.root.prep_dir.glob("*ir_seg.fits")][0].stem.split("-ir_seg")[0])
+            self.root.field_name = [*self.root.prep_dir.glob("*ir_seg.fits")][
+                0
+            ].stem.split("-ir_seg")[0]
         except:
-            print ("Segmentation map not found.")
+            print("Segmentation map not found.")
 
         try:
-            self.stack_line.setText(str([*self.root.prep_dir.glob(f"*{self.root.field_name}-ir_drz_sci.fits")][0]))
+            self.stack_line.setText(
+                str(
+                    [
+                        *self.root.prep_dir.glob(
+                            f"*{self.root.field_name}-ir_drz_sci.fits"
+                        )
+                    ][0]
+                )
+            )
         except:
-            print ("Stacked image not found.")
+            print("Stacked image not found.")
 
         try:
             for f, l in zip(self.root.filters, [self.b_line, self.g_line, self.r_line]):
-                l.setText(str([*self.root.prep_dir.glob(f"*{f.lower()}_drz_sci.fits")][0]))
+                l.setText(
+                    str([*self.root.prep_dir.glob(f"*{f.lower()}_drz_sci.fits")][0])
+                )
         except:
-            print ("Could not find all filter images.")
+            print("Could not find all filter images.")
 
     def load_all(self):
         self.root.prep_dir = Path(self.prep_dir_line.text())

@@ -39,6 +39,30 @@ dependencies = [
 line-length = 88
 target-version = ['py311']
 extend-exclude = '(.*.txt|.*.md|.*.toml|.*.odg)'
+preview = true
 
 [tool.isort]
 profile = "black"
+
+[tool.numpydoc_validation]
+checks = [
+    "all",   # report on all checks, except the below
+    "EX01",
+    "SA01",
+    "ES01",
+]
+exclude = [  # don't report on objects that match any of these regex
+    '\.undocumented_method$',
+    '\.__repr__$',
+    '\._.*$',  # Ignore anything that's private (e.g., starts with _)
+    'seg_map_viewer*',
+    'qt_utils*',
+    'FLT_fns*',
+    'GUI_main*',
+    'catalogue_fns*',
+]
+override_SS05 = [  # override SS05 to allow docstrings starting with these words
+    '^Process ',
+    '^Assess ',
+    '^Access ',
+]
