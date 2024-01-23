@@ -134,7 +134,7 @@ class GrismExtractor:
         The output directory, where all the modified files are saved.
     seg_hdr : `~astropy.io.fits.Header`
         The header of the current segmentation map.
-    seg_img : array-like
+    seg_map : array-like
         The current segmentation map.
     seg_name : str
         The name of the current segmentation map.
@@ -215,7 +215,7 @@ class GrismExtractor:
         self.seg_name = seg_path.name
 
         with pf.open(seg_path) as hdul:
-            self.seg_img = hdul[ext].data.byteswap().newbyteorder()
+            self.seg_map = hdul[ext].data.byteswap().newbyteorder()
             self.seg_hdr = hdul[ext].header
             self.seg_wcs = WCS(self.seg_hdr)
 
@@ -261,7 +261,7 @@ class GrismExtractor:
 
         self.catalogue = catalogue_fns.regen_multiband_catalogue(
             self.field_root,
-            seg_image=self.seg_img,
+            seg_image=self.seg_map,
             in_dir=self.out_dir,
             out_dir=self.out_dir,
             seg_out_path=seg_out_path,
@@ -276,7 +276,7 @@ class GrismExtractor:
         )
         return self.catalogue
 
-    def load_contamination_maps(
+    def load_grism_files(
         self,
         grism_files: npt.ArrayLike | None = None,
         detection_filter: str = "ir",
@@ -406,14 +406,14 @@ class GrismExtractor:
 
         if not hasattr(self, "grp"):
             raise Exception(
-                "GrismFLT files not loaded. Run `load_contamination_maps()' first."
+                "GrismFLT files not loaded. Run `load_grism_files()' first."
             )
         if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
             raise Exception(
                 f"The current segmentation map ({self.seg_name}) does not match the"
                 " name stored in the GrismFLT files"
                 f" ({Path(self.grp.FLTs[0].seg_file).name}). Run"
-                " `load_contamination_maps()' before extracting any spectra, or load"
+                " `load_grism_files()' before extracting any spectra, or load"
                 " the correct segmentation map."
             )
 
@@ -582,7 +582,7 @@ class GrismExtractor:
             (x_c, y_c) is less than or equal to radius.
         """
 
-        Y, X = np.ogrid[: self.seg_img.shape[0], : self.seg_img.shape[1]]
+        Y, X = np.ogrid[: self.seg_map.shape[0], : self.seg_map.shape[1]]
 
         sqrd_dist = (X - x_c) ** 2 + (Y - y_c) ** 2
 
@@ -719,20 +719,20 @@ class GrismExtractor:
             segmentation map.
         """
 
-        if not hasattr(self, "seg_img"):
+        if not hasattr(self, "seg_map"):
             raise AttributeError("Segmentation map not set.")
 
         xs, ys, radii = self._process_coords_radii(
             radius, inner_radius, centre, **kwargs
         )
 
-        curr_max = np.nanmax(self.seg_img) + 1
+        curr_max = np.nanmax(self.seg_map) + 1
         new_obj_ids = curr_max + np.arange(xs.shape[0])
         for new_id, x_c, y_c, rads in zip(new_obj_ids, xs, ys, radii):
             mask = self._create_circular_mask(x_c, y_c, rads[1])
             if rads[0] != 0:
                 mask[self._create_circular_mask(x_c, y_c, rads[0])] = 0
-            self.seg_img[mask] = new_id
+            self.seg_map[mask] = new_id
 
         return np.asarray(new_obj_ids)
 
@@ -776,20 +776,20 @@ class GrismExtractor:
             segmentation map.
         """
 
-        if not hasattr(self, "seg_img"):
+        if not hasattr(self, "seg_map"):
             raise AttributeError("Segmentation map not set.")
 
         xs, ys, radii = self._process_coords_radii(
             radius, inner_radius, centre, **kwargs
         )
 
-        curr_max = np.nanmax(self.seg_img) + 1
+        curr_max = np.nanmax(self.seg_map) + 1
         potential_obj_ids = curr_max + np.arange(0, radii.shape[0], int(segments))
 
         used_ids = []
         for pot_id, x_c, y_c, rads in zip(potential_obj_ids, xs, ys, radii):
 
-            y, x = np.indices(self.seg_img.shape)
+            y, x = np.indices(self.seg_map.shape)
 
             if isinstance(angle, u.Quantity):
                 angle = angle.to(u.deg).value
@@ -804,7 +804,7 @@ class GrismExtractor:
             plt.imshow(mask, origin="lower")
 
             for s in np.arange(segments):
-                self.seg_img[
+                self.seg_map[
                     np.where(
                         (mask)
                         & (angle_arr >= s * 360 / segments)
@@ -851,7 +851,7 @@ class GrismExtractor:
             If the supplied regions file cannot be read.
         """
 
-        if not hasattr(self, "seg_img"):
+        if not hasattr(self, "seg_map"):
             raise AttributeError("Segmentation map not set.")
 
         try:
@@ -876,9 +876,9 @@ class GrismExtractor:
 
         mask = pixel_region.to_mask(mode="subpixels")
 
-        matched_mask = mask.to_image(self.seg_img.shape) > 0.5
+        matched_mask = mask.to_image(self.seg_map.shape) > 0.5
 
-        new_obj_id = np.nanmax(self.seg_img) + 1
-        self.seg_img[matched_mask] = new_obj_id
+        new_obj_id = np.nanmax(self.seg_map) + 1
+        self.seg_map[matched_mask] = new_obj_id
 
-        return new_obj_id
+        return np.asarray(new_obj_id)
