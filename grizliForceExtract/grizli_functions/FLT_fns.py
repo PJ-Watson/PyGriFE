@@ -52,28 +52,15 @@ def init_from_input_multispec(cutout, flt, beam, conf=None, get_slice_header=Tru
                           cutout.beam.origin[0]+cutout.beam.sh[0])
 
         if hasattr(beam, "old_obj_ids") and len(np.atleast_1d(beam.old_obj_ids).flatten())>0:
-            # print (len(np.atleast_1d(beam.old_obj_ids).flatten()))
-            # seg_copy = deepcopy(cutout.beam.seg)
-            # cutout.beam.seg = flt.seg[sly_thumb, slx_thumb]
-            print (cutout.id)
             seg_copy = deepcopy(beam.seg)
             beam.seg = deepcopy(flt.orig_seg[sly_thumb, slx_thumb])
             beam.seg[seg_copy!=cutout.id] = 0
             beam.seg_ids = beam.old_obj_ids
-            # print (f"OLD_OBJ_IDS: {beam.old_obj_ids}")
-            # print (beam.direct.shape)
-            # print (beam.seg.shape)
-            # print (beam.model.shape)
-            # print (beam.modelf.shape)
             cutout.model = np.zeros_like(cutout.beam.model)
             cutout.modelf = np.zeros_like(cutout.beam.modelf)
 
-            test = deepcopy(beam.model)
-
-            # beam.old_obj_ids = [0]
             for o in beam.old_obj_ids:
                 
-                print (o, np.nansum(flt.direct.data["REF"][flt.orig_seg==o])/np.nansum(beam.direct[beam.seg==o]))
                 spec = flt.object_dispersers[o][1]
                 cgs = flt.object_dispersers[o][0]
 
@@ -81,9 +68,6 @@ def init_from_input_multispec(cutout, flt, beam, conf=None, get_slice_header=Tru
                     scale = np.nansum(beam.direct[beam.seg==o])/np.nansum(flt.direct.data["REF"][flt.orig_seg==o])
                 else:
                     scale = 1.0
-                print (scale)
-                # if cgs:
-                #     spec /= np.nansum(flt.direct.data["REF"][flt.orig_seg==o])/np.nansum(beam.direct[beam.seg==o])
 
                 if hasattr(cutout.beam, 'psf'):
                     result = beam.compute_model_psf(
@@ -102,63 +86,11 @@ def init_from_input_multispec(cutout, flt, beam, conf=None, get_slice_header=Tru
                         scale=scale,
                     )
 
-                # print (result)
-                # print (np.nansum(result))
-
                 cutout.modelf += result
                 cutout.model += result.reshape(beam.sh_beam)
 
-            
-            # import matplotlib.pyplot as plt
-            # fig, axs = plt.subplots(1,2)
-            # ax = axs.flatten()
-            # i = ax[0].imshow(beam.seg)
-            # def format_cursor_data(data):
-            #     return "[" + str(data) + "]"
-            # i.format_cursor_data = format_cursor_data
-            # i = ax[1].imshow(seg_copy)
-            # i.format_cursor_data = format_cursor_data
-
-                # print (flt.object_dispersers[o])
-            
-            # print (beam.direct.shape)
-            # print (beam.seg.shape)
-
-            # beam.seg = seg_copy
-
             cutout.beam.model = cutout.model
             cutout.beam.modelf = cutout.modelf
-
-            # if flt.grism_file == "jw01324001001_03101_00001_nis_rate.fits":
-
-            #     import matplotlib.pyplot as plt
-            #     from matplotlib import colors
-
-            #     print (dir(flt))
-            #     print (flt.grism_file)
-
-            #     vmin = 1e-8
-            #     vmax = 1
-            #     cmap = "plasma"
-            #     fig, ax = plt.subplots(3,1, sharex=True, sharey=True)
-            #     # ax[0].imshow(beam.seg, origin="lower")
-            #     print (dir(beam))
-            #     print (beam.sh)
-            #     copy_img = deepcopy(beam.direct)
-            #     copy_img[beam.seg==0] = 0
-
-                # def format_cursor_data(data):
-                #     return "[" + str(data) + "]"
-                # i = ax[1].imshow(copy_img, cmap=cmap, norm=colors.LogNorm(vmin=1e-20, vmax=1e-18))
-                # i.format_cursor_data = format_cursor_data
-                # i = ax[2].imshow(beam.seg)
-                # i.format_cursor_data = format_cursor_data
-                # # ax[0].imshow(cutout.beam.model, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax), origin="lower")
-                # i = ax[0].imshow(cutout.model, cmap=cmap, norm=colors.LogNorm(vmin=vmin, vmax=vmax), origin="lower")
-                # i.format_cursor_data = format_cursor_data
-
-
-                # plt.show()
 
         elif beam.spectrum_1d is None:
             cutout.compute_model()
@@ -173,14 +105,8 @@ def init_from_input_multispec(cutout, flt, beam, conf=None, get_slice_header=Tru
                                          get_slice_header=get_slice_header)
 
         cutout.contam = flt.model[cutout.beam.sly_parent, cutout.beam.slx_parent]*1
-        # print (flt.object_dispersers)
-        # if cutout.beam.id in flt.object_dispersers:
-        #     print ("beam in dispersers")
         cutout.contam -= cutout.beam.model
-        # else:
-            # print ("beam not in dispersers")
 
-model.BeamCutout.init_from_input = init_from_input_multispec
 
 def get_beams_with_spectrum(grp, id, size=10, center_rd=None, beam_id='A',
                 min_overlap=0.1, min_valid_pix=10, min_mask=0.01,
@@ -234,124 +160,19 @@ def get_beams_with_spectrum(grp, id, size=10, center_rd=None, beam_id='A',
         size=size,
         store=False,
         get_beams=[beam_id],
-        # spectrum_1d=spectrum_1d,
-        # is_cgs=True,
     )
-    # print (dir(grp.FLTs[0]))
-
-    # obj = grp.FLTs[0].object_dispersers[4274]
-    # print (obj[1])
-
-    # import matplotlib.pyplot as plt
-    # fig, axs = plt.subplots()
-    # axs.plot(obj[1][0][:10000], obj[1][1][:10000])
-    # plt.show()
-
-    # return
-    # print (beams)
-    # print (dir(beams))
-    # print (beams[0])
-    # print (dir(beams[0]))
-    # print (beams[0]["A"])
-    # print (dir(beams[0]["A"]))
-    # print ("1d_spec", beams[0]["A"].spectrum_1d)
 
     out_beams = []
     for flt, beam in zip(grp.FLTs, beams):
-        # print (dir(flt))
-        # for k in dir(flt):
-        #     print (k, flt.k)
-        # print (flt.transform_JWST_WFSS)
-        # print (flt[0])
         try:
             beam_in = beam[beam_id]
-            # beam_in.is_cgs = is_cgs
-            # print (dir(beam_in))
-            # print ("x0", beam_in.x0)
-            # print ("xc", beam_in.xc)
-            # print ("xcenter", beam_in.xcenter)
-            # print ("xoffset", beam_in.xoffset)
-            # print ("slx", beam_in.slx_parent)
-            # print (beam_in.model)
-
-            # slx_thumb = slice(self.beam.origin[1],
-            #               self.beam.origin[1]+self.beam.sh[1])
-
-            # sly_thumb = slice(self.beam.origin[0],
-            #                 self.beam.origin[0]+self.beam.sh[0])
-
-            # self.direct = flt.direct.get_slice(slx_thumb, sly_thumb,
-
-            # import matplotlib.pyplot as plt
-            # fig, axs = plt.subplots(2,1)
-            # ax = axs.flatten()
-            # # axs.plot(obj[1][0][:10000], obj[1][1][:10000])
-            # ax[0].imshow(beam_in.seg)
-            # ax[1].imshow(
-            #     flt.orig_seg[
-            #         beam_in.origin[0]:beam_in.origin[0]+beam_in.sh[0],
-            #         beam_in.origin[1]:beam_in.origin[1]+beam_in.sh[1]
-            #     ]*1,
-            # )
-
-            # plt.show()
-            # return
 
             if spectrum_1d is not None:
                 beam_in.spectrum_1d = spectrum_1d
                 beam_in.is_cgs = is_cgs
             elif hasattr(flt, "orig_seg"):
                 old_obj_ids = np.unique(flt.orig_seg[flt.seg==id])
-                # old_obj_ids = np.array([0,0,0, 632, 0 , 42, 0,0, 2123])
-                # print (old_obj_ids.ravel()[np.flatnonzero(old_obj_ids)])
-                # print (old_obj_ids)
-                # old_obj_ids = old_obj_ids[old_obj_ids>0]
-                # print (old_obj_ids)
-                # beam_in.old_obj_ids = np.unique(flt.orig_seg[flt.seg==id])
-                # print ("old_obj_ids", old_obj_ids)
                 beam_in.old_obj_ids = old_obj_ids.ravel()[np.flatnonzero(old_obj_ids)].astype(int)
-                print (f"beam_in old obj ids {beam_in.old_obj_ids}")
-                # for o in old_obj_ids:
-                #     print ("old_id", o, flt.object_dispersers[o])
-                # return
-
-            # # Is this a modified segmentation map?
-            # if (spectrum_1d is not None) and hasattr(flt, "orig_seg"):
-
-            #     orig_seg_thumb = flt.orig_seg[
-            #         beam_in.origin[0]:beam_in.origin[0]+beam_in.sh[0],
-            #         beam_in.origin[1]:beam_in.origin[1]+beam_in.sh[1]
-            #     ]*1
-
-            #     # Find the most common id in the relevant area of the original map
-            #     u, c = np.unique(flt.orig_seg[flt.orig_seg==id], return_counts=True)
-            #     orig_id = u[c.argmax()]
-
-            #     # scale the 1d spectrum by the fraction of the original flux 
-            #     # contained in the new segmentation map
-            #     # CAUTION - This assumes the new region is a subset of the original
-            #     # print (beam_in.direct)
-            #     # print ("FLT.DIRECT", dir(flt.direct))
-            #     # print ("FLT", dir(flt))
-            #     # print (flt.ref_file)
-            #     # print (flt.direct.data["REF"].shape)
-            #     # print (np.nansum(flt.direct.data["REF"]))
-            #     # # print (flt.direct.data)
-            #     # # print (flt.direct.data.shape)
-            #     # print (beam_in.direct.shape)
-            #     # print (flt.seg.shape)
-            #     # print (beam_in.seg.shape)
-
-            #     print (f'ORIG_ID: {orig_id}, OLD_FLUX: {flt.direct.data["REF"][flt.orig_seg == orig_id].sum()}, NEW_FLUX: {flt.direct.data["REF"][flt.seg == id].sum()} ')
-            #     print ("SCALE FACTOR:", flt.direct.data["REF"][flt.seg == id].sum() / flt.direct.data["REF"][flt.orig_seg == orig_id].sum())
-            #     spectrum_1d[1] = np.asarray(spectrum_1d[1])*flt.direct.data["REF"][flt.seg == id].sum() / flt.direct.data["REF"][flt.orig_seg == orig_id].sum()
-            #     # print (spectrum_1d[1])
-            #     # print (flt[0])
-            #     # import matplotlib.pyplot as plt
-            #     # fig, ax = plt.subplots(2,1)
-            #     # ax[0].imshow(flt.orig_seg)
-            #     # ax[1].imshow(flt.seg, cmap="plasma")
-            #     # plt.show()
             
             beam_in.spectrum_1d = spectrum_1d
 
@@ -431,39 +252,14 @@ def load_and_mod_FLT(grism_file, sci_extn, direct_file, pad, ref_file,
         flt.conf_file = f"{os.environ['GRIZLI']}/CONF/{flt.conf_file.split('/')[-1]}"
 
         status = flt.load_from_fits(save_file)
-        print ("ROTATED?", flt.is_rotated)
 
         if seg_file is not None:
-            # print (f"TESTING: {seg_file} vs {flt.seg_file}")
-            # print (str(flt.seg_file)==str(seg_file))
+
             if hasattr(flt, "seg_file") and str(flt.seg_file) != str(seg_file):
                 flt.orig_seg_file = deepcopy(flt.seg_file)
                 flt.orig_seg = deepcopy(flt.seg)
-                # flt.orig_seg = np.rot90(flt.seg, -1)
-            # if hasattr(flt, "seg"):
-            #     flt.orig_seg = np.rot90(flt.seg, -1)
-            # if hasattr(flt, "seg_file"):
-            #     flt.orig_seg_file = flt.seg_file
+
             flt.process_seg_file(seg_file)
-            print (flt.is_rotated)
-
-        print (flt.orig_seg)
-
-        
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2,1)
-        # ax[0].imshow(flt.orig_seg, origin="lower")
-        # ax[1].imshow(flt.seg, cmap="plasma", origin="lower")
-        # plt.show()
-    
-
-        # print (dir(flt.object_dispersers))
-        # print (dir(flt.object_dispersers[4149]))
-        # for k, v in flt.object_dispersers[4149].items():
-        #     print (f"key: {k}, value: {v}")
-        # print (flt.object_dispersers["test"])
-        # print (flt.test[0])
-        # exit()
 
     else:        
         flt = model.GrismFLT(grism_file=grism_file, sci_extn=sci_extn,
@@ -490,12 +286,6 @@ def load_and_mod_FLT(grism_file, sci_extn, direct_file, pad, ref_file,
     if flt.grism.instrument in ['NIRISS', 'NIRCAM']:
 
         flt.transform_JWST_WFSS()
-
-        # import matplotlib.pyplot as plt
-        # fig, ax = plt.subplots(2,1)
-        # ax[0].imshow(flt.orig_seg, origin="lower")
-        # ax[1].imshow(flt.seg, cmap="plasma", origin="lower")
-        # plt.show()
     
     if hasattr(flt, 'conf'):
         delattr(flt, 'conf')
@@ -696,7 +486,6 @@ def mod_compute_model_orders(self,
             If `in_place` is False, return a full array including the model
             for the single object.
         """
-        print ("RUNNING THE MODDED FUNCTION")
         from grizli.utils_c import disperse
 
         if id in self.object_dispersers:
@@ -892,11 +681,6 @@ def mod_compute_model_orders(self,
 
         # Compute old model
         if hasattr(self, "orig_seg"):
-            # print ("ORIG SEG EXISTS")
-            # print (self.orig_seg.shape)
-            # print (self.seg.shape)
-            # print (beam.seg.shape)
-            # print (dir(beam))
             for b in beams:
                 beam = beams[b]
 
@@ -906,24 +690,14 @@ def mod_compute_model_orders(self,
 
                 sly_thumb = slice(beam.origin[0],
                                 beam.origin[0]+beam.sh[0])
-                # print (self.orig_seg[sly_thumb, slx_thumb])
                 seg_copy = deepcopy(beam.seg)
                 beam.seg = deepcopy(self.orig_seg[sly_thumb, slx_thumb])
                 beam.seg[seg_copy!=beam.id] = 0
-                # print (np.unique(beam.seg))
                 old_obj_ids = np.unique(beam.seg[seg_copy==beam.id])
                 old_obj_ids = old_obj_ids.ravel()[np.flatnonzero(old_obj_ids)].astype(int)
-                # print (beam.model.shape)
                 seg_ids_copy = deepcopy(beam.seg_ids)
                 beam.seg_ids = old_obj_ids
 
-
-                # import matplotlib.pyplot as plt
-                # import matplotlib.colors as colors
-                # fig, axs = plt.subplots(3,2)
-                # ax = axs.flatten()
-
-                # new_model = np.zeros_like(beam.model)
                 new_modelf = np.zeros_like(beam.modelf)
                 for i, o in enumerate(old_obj_ids):
                     if o == id:
@@ -933,16 +707,6 @@ def mod_compute_model_orders(self,
                         spec = self.object_dispersers[o][1]
                         cgs = self.object_dispersers[o][0]
 
-                    # print (o)
-                    # print (spec)
-                    # print (cgs)
-                    # print (self.direct.data["REF"].shape)
-                    # print (self.orig_seg.shape)
-                    # print (dir(self.direct))
-                    # print (np.nansum(self.direct.data["REF"][self.orig_seg==o])/np.nansum(beam.direct[beam.seg==o]))
-                    # print (np.nansum(self.direct.data["REF"][self.orig_seg==o])/np.nansum(self.direct.data["REF"][(self.orig_seg==o) & (self.seg==id)]))
-                    # print (f"OLD_SUM: {np.nansum(self.direct.data['REF'][self.orig_seg==o])}")
-                    # print (f"NEW_SUM: {np.nansum(self.direct.data['REF'][(self.orig_seg==o) & (self.seg==id)])}")
                     if cgs:
                         scale = np.nansum(beam.direct[beam.seg==o])/np.nansum(self.direct.data["REF"][self.orig_seg==o])
                     else:
@@ -966,18 +730,7 @@ def mod_compute_model_orders(self,
                             scale=scale,
                         )
 
-                #     # print (result)
-                #     # print (np.nansum(result))
-
                     new_modelf += result
-                    # ax[i].imshow(result.reshape(beam.sh_beam), norm=colors.LogNorm(vmin=1e-3,vmax=20), cmap="plasma")
-
-                # plt.show()
-
-                # fig, axs = plt.subplots(4,1)
-                # ax = axs.flatten()
-                # ax[1].imshow(beam.seg)
-                # ax[2].imshow(beam.direct, norm=colors.LogNorm(vmin=1e-20, vmax=1e-18))
 
                 beam.modelf = new_modelf
                 beam.model = new_modelf.reshape(beam.sh_beam)
@@ -985,19 +738,6 @@ def mod_compute_model_orders(self,
                 beam.seg_ids = seg_ids_copy
                 beam.id = id
 
-                # ax[0].imshow(beam.model, norm=colors.LogNorm(vmin=1e-2, vmax=20))
-                # ax[3].imshow(beam.seg)
-                # plt.show()
-
-                #     # print (flt.object_dispersers[o])
-                
-                # print (beam.direct.shape)
-                # print (beam.seg.shape)
-
-                # # beam.seg = seg_copy
-
-                # cutout.beam.model = cutout.model
-                # cutout.beam.modelf = cutout.modelf
                 object_in_model=True
 
         elif object_in_model:

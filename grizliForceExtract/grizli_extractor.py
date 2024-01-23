@@ -29,7 +29,7 @@ import logging
 if version("sep").split(".")[1] < "3":
     raise ImportError("""
         Forced extraction requires SEP>=1.3.0. Please install the fork maintained
-        at https://github.com/PJ-Watson/sep/tree/dual-image.
+        at https://github.com/PJ-Watson/sep.
     """)
 
 # grizli_dir = Path(
@@ -82,65 +82,62 @@ import eazy
 
 from grizli_functions import catalogue_fns, FLT_fns
 
-extended_translate = {
-    'f098m': 201, 'f105w': 202, 'f110w': 241, 'f125w': 203, 'f140w': 204, 
-    'f160w': 205, 'f435w': 233, 'f475w': 234, 'f555w': 235, 'f606w': 236, 
-    'f625w': 237, 'f775w': 238, 'f814w': 239, 'f850lp': 240, 'f702w': 15, 
-    'f600lpu': 243, 'f225wu': 207, 'f275wu': 208, 'f336wu': 209, 'f350lpu': 339, 
-    'f438wu': 211, 'f475wu': 212, 'f475xu': 242, 'f555wu': 213, 'f606wu': 214, 
-    'f625wu': 215, 'f775wu': 216, 'f814wu': 217, 'f390wu': 210, 'ch1': 18, 
-    'ch2': 19, 'f336w':209, 'f350lp':339, 'f115w': 309, 'f150w': 310, 'f200w': 311,
-    "f277w": 375,
-}
-
 multifit._loadFLT = FLT_fns.load_and_mod_FLT
 model.GrismFLT.transform_JWST_WFSS = FLT_fns.mod_transform_JWST_WFSS
 model.GrismFLT.compute_model_orders = FLT_fns.mod_compute_model_orders
-
-# photoz.FILTER_TRANS = extended_translate
-# photoz.eazy_photoz = partial(photoz.eazy_photoz, filter_trans=extended_translate)
-
-# print (photoz.eazy_photoz.__defaults__)
-
-"""
-Steps:
- - Recalculate photometry for affected objects - look at this function:
-
-        auto_script.multiband_catalog(field_root=root,
-            **multiband_catalog_args)
-
- - Edit contamination maps - need to modify `multifit.GroupFLT`
-
- - Permanently modify *GrismFLT.fits, or re-run modifications each time?
-
- - Force all functions here to save to a different folder, e.g. ForcedExtractions, and save all files there.
-
- - ImageViewer module can be as generic as possible, but `Extract Object` button can be customised to work only with grizli.
-
- - Add redshift range to search for (min/max entries).
-
- - [DONE] Sub-class imageviewer? Make one completely generic function, and one specifically for grizli.
-
- - Separate out installation (take inspiration from grizli). Make installing grizli components optional.
-
-"""
-
-# def _modify_conf_file_location(file):
-
-#     if os.path.exists(file) & ('GrismFLT' in file):
-#         print(f'Checking conf file location for {file}.')
-
-#         with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'rb') as fp:
-#             flt = pickle.load(fp)
-
-#         flt.conf_file = f"{os.environ['GRIZLI']}/CONF/{flt.conf_file.split('/')[-1]}"
-
-#         with open(file.replace('GrismFLT.fits', 'GrismFLT.pkl'), 'wb') as fp:
-#             pickle.dump(flt, fp)
+model.BeamCutout.init_from_input = FLT_fns.init_from_input_multispec
 
 class GrizliExtractor:
+    """
+    A class for the extraction of objects from arbitrary regions
+    of existing slitless spectroscopic exposures. This allows the
+    modification of both catalogues and contamination maps previously
+    derived using `~grizli`.
 
-    def __init__(self, field_root, in_dir, out_dir, seg_path=None):
+    Attributes
+    ----------
+    catalogue : `~astropy.table.Table`
+        The multiband catalogue used by grizli.
+    field_root : str
+        The root name of the catalogue and processed images.
+    grp : `~grizli.multifit.GroupFLT`
+        The container for multiple grism exposures.
+    in_dir : os.PathLike
+        The input directory.
+    out_dir : os.PathLike
+        The output directory, where all the modified files are saved.
+    seg_hdr : `~astropy.io.fits.Header`
+        The header of the current segmentation map.
+    seg_img : array-like
+        The current segmentation map.
+    seg_name : str
+        The name of the current segmentation map.
+    seg_wcs : `~astropy.wcs.WCS`
+        The WCS of the current segmentation map.
+    """
+
+    def __init__(self, field_root : str, in_dir: str | os.PathLike, out_dir: str | os.PathLike, seg_path: str | os.PathLike | None = None):
+        """
+        Initialise the extractor object, and make copies of the
+        relevant files.
+
+        Parameters
+        ----------
+        field_root : str
+            The root name of the catalogue and processed images, e.g.
+            ``'{field_root}-ir.cat.fits'``.
+        in_dir : str or os.PathLike
+            The input directory, containing all the original (unmodified)
+            grism files, mosaics, and the segmentation map. Often named
+            ``'Prep/'``.
+        out_dir : str or os.PathLike
+            The output directory, where all the modified files will be
+            saved. Any relevant files are copied from `in_dir` to
+            `out_dir`, if they do not already exist.
+        seg_path : str or os.PathLike, optional
+            The path pointing to the original segmentation map. If not
+            supplied, this will have to be loaded later.
+        """
 
         self.field_root = field_root
         self.in_dir = Path(in_dir)
@@ -177,59 +174,50 @@ class GrizliExtractor:
                         f"File {out_path.name} exists already.",
                         verbose=True,
                     )
-                # print (o.name)
-
-        # print ([*flt_files])
-
-        # grizli_dir = self.out_dir / "grizli"
-        # grizli_dir.mkdir(exist_ok=True)
-        # (grizli_dir / "CONF").mkdir(exist_ok=True)
-        # (grizli_dir / "templates").mkdir(exist_ok=True)
-        # (grizli_dir / "iref").mkdir(exist_ok=True)
-        # (grizli_dir / "iref").mkdir(exist_ok=True)
-        # os.environ["GRIZLI"] = str(grizli_dir)
-        # os.environ["iref"] = str(grizli_dir / "iref")
-        # os.environ["jref"] = str(grizli_dir / "jref")
-
-        # print (os.environ["GRIZLI"])
-
-        # print (grizli.GRIZLI_PATH)
-
-        # grizli.GRIZLI_PATH = os.environ["GRIZLI"]
-
-        # reload (grizli)
-        # print (grizli.GRIZLI_PATH)
 
         if seg_path is not None:
             self.load_orig_seg_map(seg_path)
 
 
+    def load_orig_seg_map(self, seg_path: str | os.PathLike, ext: int | str = 0) -> None:
+        """
+        Loads a segmentation map into memory, updating the stored name
+        and WCS information in the process.
 
-    def load_orig_seg_map(self, seg_path, ext=0):
+        Parameters
+        ----------
+        seg_path : str or os.PathLike
+            The path pointing to the segmentation map.
+        ext : int or str, optional
+            The number or name of the HDUList extension containing the
+            segmentation data, by default 0.
+        """
+
 
         seg_path = Path(seg_path)
 
         self.seg_name = seg_path.name
-
-        # shutil.copy(
-        #     src=seg_img_path,
-        #     dst=self.out_dir/seg_img_path.with_stem(f"orig_{seg_img_path.stem}")
-        # )
         
         with pf.open(seg_path) as hdul:
             self.seg_img = hdul[ext].data.byteswap().newbyteorder()
             self.seg_hdr = hdul[ext].header
             self.seg_wcs = WCS(self.seg_hdr)
 
-    def regen_multiband_catalogue(self, **kwargs):
+    def regen_multiband_catalogue(self, **kwargs) -> astropy.table.Table:
         """
-        Regenerate the grizli multiband catalogue, for the current segmentation map.
+        Regenerate the grizli multiband catalogue, for the current
+        segmentation map.
         
         Parameters
         ----------
         **kwargs : dict, optional
             Keyword arguments are passed through to 
             `~grizli_functions.catalogue_fns.regen_multiband_catalogue()`.
+
+        Returns
+        -------
+        catalogue : `~astropy.table.Table`
+            The multiband catalogue.
 
         """
 
@@ -240,7 +228,8 @@ class GrizliExtractor:
             show_date=True,
         )
 
-        [p.unlink() for p in self.out_dir.glob("*phot_apcorr.fits")]
+        for p in self.out_dir.glob("*phot_apcorr.fits"):
+            p.unlink()
 
         kwargs["get_all_filters"] = kwargs.get("get_all_filters", True)
 
@@ -272,14 +261,46 @@ class GrizliExtractor:
             verbose=True,
             show_date=True,
         )
+        return self.catalogue
 
-    def load_contamination_maps(self, grism_files=None, detection_filter="ir", pad=800, cpu_count=4, **kwargs):
+    def load_contamination_maps(self, grism_files: npt.ArrayLike | None = None, 
+    detection_filter: str = "ir", pad: int | tuple[int, int] = 800, cpu_count: int = 4, **kwargs) -> grizli.multifit.GroupFLT:
+        """
+        Load, or reload, an existing set of grism exposures and
+        contamination maps into memory.
 
-        '''
-        Be careful with the cpu_count - the memory footprint per process is extremely high 
-        (e.g. with a 6P/8E CPU, and 32GB RAM, I typically limit this to <=6 cores).
+        Parameters
+        ----------
+        grism_files : array-like, optional
+            An explicit list of the grism files to use. By default, all 
+            `*GrismFLT.fits' files in the output directory will be used.
+        detection_filter : str, optional
+            The filter image used for the source detection, by default
+            ``ir``. This is used to locate the catalogue.
+        pad : int or tuple[int, int], optional
+            The padding in pixels, allowing modelling of sources outside
+            the detector field of view. If a tuple is supplied, this is
+            taken as (pady, padx). Defaults to 800pix in both axes.
+        cpu_count : int, optional
+            If < 0, load files serially. If > 0, load files in `cpu_count`
+            parallel processes. Use all available cores if
+            `cpu_count` = 0. Defaults to 4 processes.
+        **kwargs : dict, optional
+            Any other keyword arguments, passed through to 
+            `grizli.multifit.GroupFLT()`.
 
-        '''
+        Notes
+        -----
+        Be careful with the cpu_count - the memory footprint per process
+        is extremely high (e.g. with a 6P/8E CPU, and 32GB RAM, I
+        typically limit this to <=6 cores).
+
+        Returns
+        -------
+        self.grp : `~grizli.multifit.GroupFLT`
+            The container for multiple grism exposures.
+            
+        """
 
         if grism_files is None:
             grism_files = [str(p) for p in self.out_dir.glob("*GrismFLT.fits")]
@@ -321,17 +342,20 @@ class GrizliExtractor:
             pad=pad,
             seg_file=seg_path,
             catalog=str(catalog_path),
+            **kwargs
         )
 
-    def extract_spectra(self, obj_id_list: npt.ArrayLike, z_range: npt.ArrayLike = [0., 0.5], beams_kwargs: dict[str, Any] | None = None, multibeam_kwargs: dict[str, Any] | None = None, spectrum_1d: npt.ArrayLike | None = None, is_cgs: bool = True):
+        return self.grp
+
+    def extract_spectra(self, obj_id_list: npt.ArrayLike, z_range: npt.ArrayLike = [0., 0.5], beams_kwargs: dict[str, Any] | None = None, multibeam_kwargs: dict[str, Any] | None = None, spectrum_1d: npt.ArrayLike | None = None, is_cgs: bool = True) -> None:
         """
         Perform a full extraction of the specified objects.
 
         Parameters
         ----------
-        obj_id_list : array_like
+        obj_id_list : array-like
             The object ids in the segmentation map which will be extracted.
-        z_range : array_like, optional
+        z_range : array-like, optional
             The redshift range to consider for the extraction, by default 0 < z < 0.5
         beams_kwargs : dict, optional
             Keyword arguments to pass to grizli.multifit.GroupFLT.get_beams()
@@ -349,8 +373,8 @@ class GrizliExtractor:
             raise Exception("GrismFLT files not loaded. Run `load_contamination_maps()' first.")
         if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
             raise Exception(
-                f"The current segmentation map ({self.seg_name}) does not match the"
-                f"name stored in the GrismFLT files ({Path(self.grp.FLTs[0].seg_file).name})."
+                f"The current segmentation map ({self.seg_name}) does not match the "
+                f"name stored in the GrismFLT files ({Path(self.grp.FLTs[0].seg_file).name}). "
                 "Run `load_contamination_maps()' before extracting any spectra, or load "
                 "the correct segmentation map."
             )
@@ -385,8 +409,6 @@ class GrizliExtractor:
         multibeam_kwargs["min_mask"] = multibeam_kwargs.get("min_mask", 0.)
         multibeam_kwargs["min_sens"] = multibeam_kwargs.get("min_sens", 0.)
 
-        # if not hasattr(obj_id_list, '__iter__'):
-        #     obj_id_list = [obj_id_list]
         obj_id_arr = np.atleast_1d(obj_id_list).flatten()
 
         for obj_id in tqdm(obj_id_arr):
@@ -414,10 +436,10 @@ class GrizliExtractor:
         ----------
         spectrum : str, optional
             The component of the best-fit spectrum to use, either `full' or `continuum'.
-        max_chinu : int | float, optional
+        max_chinu : int or float, optional
             The maximum reduced chi-squared value of the fit to accept, in order to 
             refine the contamination model with the resulting spectrum, by default 5.
-        fit_files : list[str] | list[os.PathLike] | None, optional
+        fit_files : list[str] or list[os.PathLike] or None, optional
             An explicit list of the best-fit files to use. By default, all 
             `*full.fits' files in the current directory will be used.
 
@@ -498,22 +520,22 @@ class GrizliExtractor:
         mask = sqrd_dist <= radius**2
         return mask
 
-    def add_circ_obj(self, radius: astropy.units.Quantity | float | Iterable[astropy.units.Quantity | float] = 3*u.arcsec, 
-        inner_radius: astropy.units.Quantity | float | Iterable[astropy.units.Quantity | float] = 0, 
-        centre: astropy.coordinates.SkyCoord = None, **skycoord_kwargs):
+    def add_circ_obj(self, radius: astropy.units.Quantity | npt.ArrayLike = 3*u.arcsec, 
+        inner_radius: astropy.units.Quantity | npt.ArrayLike = 0, 
+        centre: astropy.coordinates.SkyCoord = None, **kwargs):
 
         """
         Add one or more circular objects to the segmentation map.
 
         Parameters
         ----------
-        radius : astropy.units.Quantity | float | Iterable[astropy.units.Quantity  |  float], optional
+        radius : `~astropy.units.Quantity` | array-like, optional
             The outer radius of the aperture, by default 3 arcseconds.
-        inner_radius : astropy.units.Quantity | float | Iterable[astropy.units.Quantity  |  float], optional
+        inner_radius : `~astropy.units.Quantity` | array-like, optional
             The inner radius, if specified, creates an annulus instead of an aperture.
-        centre : astropy.coordinates.SkyCoord, optional
+        centre : `~astropy.coordinates.SkyCoord`, optional
             The centre of the aperture.
-        **skycoord_kwargs : dict, optional
+        **kwargs : dict, optional
             Any inputs accepted by astropy.coordinates.SkyCoord, if skycoords is None.
 
         Returns
@@ -590,56 +612,6 @@ class GrizliExtractor:
             self.seg_img[mask] = new_id
 
         return new_obj_ids
-            
-
-    
-    # def add_circ_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, radius=1, inner_radius=0):
-
-    #     if not hasattr(self, "seg_img"):
-    #         raise AttributeError("Segmentation map not set.")
-
-    #     radius = np.atleast_1d(np.asarray(radius))
-    #     inner_radius = np.atleast_1d(np.asarray(inner_radius))
-
-    #     if (ra is not None) & (dec is not None):
-    #         try:
-    #             ra = np.atleast_1d(np.asarray(ra))
-    #             dec = np.atleast_1d(np.asarray(dec))
-    #             input_coords = SkyCoord(ra=ra, dec=dec, unit=unit)
-    #         except Exception as e:
-    #             raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-    #         if not self.seg_wcs.footprint_contains(input_coords):
-    #             raise Exception(f"Supplied coordinates are outside the segmentation map footprint.")
-    #         x_p, y_p = input_coords.to_pixel(self.seg_wcs)
-
-    #     elif (x is not None) & (y is not None):
-    #         try:
-    #             x = np.asarray(x)
-    #             y = np.asarray(y)
-    #             input_coords = SkyCoord(x=x, y=y)
-    #         except Exception as e:
-    #             raise Exception(f"Could not parse supplied ra, dec as on-sky coordinates. {e}")
-    #     else:
-    #         raise Exception("Coordinate pair not supplied.")
-
-    #     if radius.shape[0]<x_p.shape[0]:
-    #         radius = np.array([radius[0]]*x_p.shape[0])
-    #     if inner_radius.shape[0]<x_p.shape[0]:
-    #         inner_radius = np.array([inner_radius[0]]*x_p.shape[0])
-    #     for i, o in zip(inner_radius, radius):
-    #         if i>=o:
-    #             print (i, o)
-    #             raise Exception("Inner radius cannot be greater than outer radius.")
-
-    #     curr_max = np.nanmax(self.seg_img) + 1
-    #     obj_ids = curr_max + np.arange(radius.shape[0])
-    #     for o_i, x_i, y_i, r_i, i_i in zip(obj_ids, x_p, y_p, radius, inner_radius):
-    #         mask = self._create_circular_mask(x_i,y_i,r_i)
-    #         if i_i != 0:
-    #             mask[self._create_circular_mask(x_i,y_i,i_i)] = 0
-    #         self.seg_img[mask] = o_i
-
-    #     return obj_ids
 
     def add_segment_obj(self, ra=None, dec=None, x=None, y=None, unit="deg", skycoords=None, segments=4, angle=0, radius=0):
 
@@ -707,12 +679,12 @@ class GrizliExtractor:
 
         Parameters
         ----------
-        reg_path : str | os.PathLike
-            The path pointing to the region
-        format : str | None, optional
+        reg_path : str or os.PathLike
+            The path pointing to the region file.
+        format : str or None, optional
             The file format specifier. If None, the format is 
             automatically inferred from the file extension.
-        reg_wcs : astropy.wcs.WCS | None, optional
+        reg_wcs : `~astropy.wcs.WCS` or None, optional
             The WCS to use to convert pixels to world coordinates. 
             By default, the segmentation map WCS will be used.
 
