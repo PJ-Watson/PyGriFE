@@ -21,7 +21,7 @@ dependencies = [
     "numpy>=1.24",
     "matplotlib>=3.6",
     "tqdm>=4.66",
-    "pyqt6>=6.6.0",
+    # "pyqt6>=6.6.0",
     # "qimage2ndarray @ git+https://github.com/hmeine/qimage2ndarray",
     # "grizli [jwst] @ git+https://github.com/gbrammer/grizli",
     # "eazy @ git+https://github.com/gbrammer/eazy-py",
