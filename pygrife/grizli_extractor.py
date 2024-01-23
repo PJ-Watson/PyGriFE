@@ -29,8 +29,8 @@ from tqdm import tqdm
 
 if version("sep").split(".")[1] < "3":
     raise ImportError("""
-        Forced extraction requires SEP>=1.3.0. Please install the fork maintained
-        at https://github.com/PJ-Watson/sep.
+        Modifying the object catalogue requires SEP>=1.3.0. Please install the fork
+        maintained at https://github.com/PJ-Watson/sep.
     """)
 
 # grizli_dir = Path(
@@ -94,7 +94,7 @@ model.GrismFLT.compute_model_orders = FLT_fns.mod_compute_model_orders
 model.BeamCutout.init_from_input = FLT_fns.init_from_input_multispec
 
 
-class GrizliExtractor:
+class GrismExtractor:
     """
     A class for extracting additional objects from processed grism data.
 
@@ -221,7 +221,7 @@ class GrizliExtractor:
 
     def regen_multiband_catalogue(self, **kwargs) -> astropy.table.Table:
         """
-        Regenerate the grizli catalogue, for the current segmentation map.
+        Recreate the `grizli` catalogue for the current segmentation map.
 
         Parameters
         ----------

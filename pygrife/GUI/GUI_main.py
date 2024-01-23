@@ -17,7 +17,8 @@ from astropy.visualization import (
     ManualInterval,
     SqrtStretch,
 )
-from grizli_extractor import GrizliExtractor
+
+# from grizli_extractor import GrizliExtractor
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (
