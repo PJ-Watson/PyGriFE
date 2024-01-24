@@ -694,6 +694,7 @@ class GrismExtractor:
         radius: astropy.units.Quantity | npt.ArrayLike = 3 * u.arcsec,
         inner_radius: astropy.units.Quantity | npt.ArrayLike = 0,
         centre: astropy.coordinates.SkyCoord | None = None,
+        init_id: int | None = None,
         **kwargs,
     ) -> npt.NDArray:
         """
@@ -708,6 +709,10 @@ class GrismExtractor:
             an aperture.
         centre : `~astropy.coordinates.SkyCoord`, optional
             The centre of the aperture.
+        init_id : int, optional
+            The ID to assign to the object. If multiple coordinates are
+            given, the ID will increase in integer steps from `init_id`.
+            By default, `init_id` will start at `max(seg_map)+1`.
         **kwargs : dict, optional
             Any inputs accepted by astropy.coordinates.SkyCoord, if
             `centre` is None.
@@ -726,8 +731,19 @@ class GrismExtractor:
             radius, inner_radius, centre, **kwargs
         )
 
-        curr_max = np.nanmax(self.seg_map) + 1
-        new_obj_ids = curr_max + np.arange(xs.shape[0])
+        if xs.shape[0] == 0:
+            warnings.warn("No valid coordinates given, so no new objects added.")
+
+        if init_id is None:
+            init_id = np.nanmax(self.seg_map) + 1
+        new_obj_ids = init_id + np.arange(xs.shape[0])
+
+        test_in = np.isin(new_obj_ids, self.seg_map)
+        if any(test_in):
+            warnings.warn(
+                f"Object IDs {new_obj_ids[test_in]} exist already in the segmentation"
+                " map, and will be merged with the new object(s)."
+            )
         for new_id, x_c, y_c, rads in zip(new_obj_ids, xs, ys, radii):
             mask = self._create_circular_mask(x_c, y_c, rads[1])
             if rads[0] != 0:
@@ -743,6 +759,7 @@ class GrismExtractor:
         centre: astropy.coordinates.SkyCoord = None,
         segments: int = 4,
         angle: astropy.units.Quantity | float = 0,
+        init_id: int | None = None,
         **kwargs,
     ) -> npt.NDArray:
         """
@@ -765,6 +782,10 @@ class GrismExtractor:
             by default 4.
         angle : `~astropy.units.Quantity` or float, optional
             The position angle offset, by default 0.
+        init_id : int, optional
+            The ID to assign to the object. If multiple coordinates are
+            given, the ID will increase in integer steps from `init_id`.
+            By default, `init_id` will start at `max(seg_map)+1`.
         **kwargs : dict, optional
             Any inputs accepted by astropy.coordinates.SkyCoord, if
             `centre` is None.
@@ -783,8 +804,19 @@ class GrismExtractor:
             radius, inner_radius, centre, **kwargs
         )
 
-        curr_max = np.nanmax(self.seg_map) + 1
-        potential_obj_ids = curr_max + np.arange(0, radii.shape[0], int(segments))
+        if xs.shape[0] == 0:
+            warnings.warn("No valid coordinates given, so no new objects added.")
+
+        if init_id is None:
+            init_id = np.nanmax(self.seg_map) + 1
+        potential_obj_ids = init_id + np.arange(0, radii.shape[0], int(segments))
+
+        test_in = np.isin(potential_obj_ids, self.seg_map)
+        if any(test_in):
+            warnings.warn(
+                f"Object IDs {potential_obj_ids[test_in]} exist already in the "
+                "segmentation map, and will be merged with the new object(s)."
+            )
 
         used_ids = []
         for pot_id, x_c, y_c, rads in zip(potential_obj_ids, xs, ys, radii):
@@ -798,10 +830,6 @@ class GrismExtractor:
             mask = self._create_circular_mask(x_c, y_c, rads[1])
             if rads[0] != 0:
                 mask[self._create_circular_mask(x_c, y_c, rads[0])] = 0
-
-            import matplotlib.pyplot as plt
-
-            plt.imshow(mask, origin="lower")
 
             for s in np.arange(segments):
                 self.seg_map[
@@ -820,6 +848,7 @@ class GrismExtractor:
         reg_path: str | os.PathLike,
         format: str | None = None,
         reg_wcs: astropy.wcs.WCS | None = None,
+        init_id: int | None = None,
     ) -> int:
         """
         Add a new object to the segmentation map from a regions file.
@@ -834,6 +863,10 @@ class GrismExtractor:
         reg_wcs : `~astropy.wcs.WCS` or None, optional
             The WCS to use to convert pixels to world coordinates.
             By default, the segmentation map WCS will be used.
+        init_id : int, optional
+            The ID to assign to the object. If multiple coordinates are
+            given, the ID will increase in integer steps from `init_id`.
+            By default, `init_id` will start at `max(seg_map)+1`.
 
         Returns
         -------
@@ -878,7 +911,22 @@ class GrismExtractor:
 
         matched_mask = mask.to_image(self.seg_map.shape) > 0.5
 
-        new_obj_id = np.nanmax(self.seg_map) + 1
-        self.seg_map[matched_mask] = new_obj_id
+        if np.nansum(matched_mask) == 0:
+            warnings.warn(
+                "The specified region lies outside the segmentation map "
+                "footprint. No new objects added."
+            )
 
-        return np.asarray(new_obj_id)
+        if init_id is None:
+            init_id = np.nanmax(self.seg_map) + 1
+        else:
+            test_in = np.isin(init_id, self.seg_map)
+            if any(test_in):
+                warnings.warn(
+                    f"Object IDs {new_obj_ids[test_in]} exist already in the "
+                    "segmentation map, and will be merged with the new object(s)."
+                )
+
+        self.seg_map[matched_mask] = init_id
+
+        return np.asarray(init_id)
