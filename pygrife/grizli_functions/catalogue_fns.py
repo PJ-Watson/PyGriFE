@@ -1,3 +1,6 @@
+"""Grizli functions used to regenerate the detection catalogue."""
+
+import copy
 import glob
 import os
 from pathlib import Path
@@ -25,7 +28,7 @@ def make_SEP_catalog(
     bkg_only=False,
     bkg_params={"bw": 32, "bh": 32, "fw": 3, "fh": 3},
     verbose=True,
-    phot_apertures=None,
+    phot_apertures=prep.SEXTRACTOR_PHOT_APERTURES,
     aper_segmask=False,
     rescale_weight=True,
     err_scale=-np.inf,
@@ -40,7 +43,7 @@ def make_SEP_catalog(
     subpix=0,
     mask_kron=False,
     max_total_corr=2,
-    detection_params=None,
+    detection_params=prep.SEP_DETECT_PARAMS,
     bkg_mask=None,
     pixel_scale=0.06,
     log=False,
@@ -54,7 +57,21 @@ def make_SEP_catalog(
     seg_out_path=None,
     **kwargs,
 ):
-    """Make a catalog from drizzle products using the SEP implementation of SourceExtractor
+    """
+    Make a source catalogue from drizzled images, using SExtractor.
+
+    This function was originally taken from
+    `~grizli.prep.make_SEP_catalog`, and has been modified in the
+    following ways:
+    - Add `in_dir` and `out_dir` parameters, so that the operations can
+      take place using files from one directory, but writing the output
+      to another.
+    - Add `seg_out_path` parameter, so that the name of the segmentation
+      map output can be specified.
+    - Add `seg_image` parameter. Using a fork of SEP (SEP>=1.3.0,
+      https://github.com/PJ-Watson/sep), passing an array here allows one
+      to skip the object detection, and instead derive all the catalogue
+      quantities for the specified objects.
 
     Parameters
     ----------
@@ -72,35 +89,36 @@ def make_SEP_catalog(
 
         >>> weight_file = drz_file.replace('_sci.fits', '_wht.fits')
         >>> weight_file = weight_file.replace('_drz.fits', '_wht.fits')
+        .
 
     sci, wht : str
-        Filenames to override `drz_file` and `weight_file` derived from the
-        ``root`` parameter.
+        Filenames to override `drz_file` and `weight_file` derived from
+        the `root` parameter.
 
     threshold : float
-        Detection threshold for `sep.extract`
+        Detection threshold for `sep.extract`.
 
     get_background : bool
-        Compute the background with `sep.Background`
+        Compute the background with `sep.Background`.
 
     bkg_only : bool
-        If `True`, then just return the background data array and don't run
-        the source detection
+        If `True`, then just return the background data array and don't
+        run the source detection.
 
     bkg_params : dict
-        Keyword arguments for `sep.Background`.  Note that this can include
-        a separate optional keyword ``pixel_scale`` that indicates that the
-        background sizes `bw`, `bh` are set for a paraticular pixel size.
-        They will be scaled to the pixel dimensions of the target images using
-        the pixel scale derived from the image WCS.
+        Keyword arguments for `sep.Background`.  Note that this can
+        include a separate optional keyword ``pixel_scale`` that indicates
+        that the background sizes `bw`, `bh` are set for a paraticular
+        pixel size. They will be scaled to the pixel dimensions of the
+        target images using the pixel scale derived from the image WCS.
 
     verbose : bool
-        Print status messages
+        Print status messages.
 
     phot_apertures : str or array-like
         Photometric aperture *diameters*. If given as a string then assume
         units of pixels. If an array or list, can have units, e.g.,
-        `astropy.units.arcsec`.
+        `~astropy.units.arcsec`.
 
     aper_segmask : bool
         If true, then run SEP photometry with segmentation masking.  This
@@ -112,38 +130,38 @@ def make_SEP_catalog(
         weight image to the variance estimated by `sep.Background`.
 
     err_scale : float
-        Explicit value to use for the weight scaling, rather than calculating
-        with `rescale_weight`.  Only used if ``err_scale > 0``
+        Explicit value to use for the weight scaling, rather than
+        calculating with `rescale_weight`. Only used if ``err_scale > 0``.
 
     use_bkg_err : bool
-        If true, then use the full error array derived by `sep.Background`.
-        This is turned off by default in order to preserve the pixel-to-pixel
-        variation in the drizzled weight maps.
+        If true, then use the full error array derived by
+        `sep.Background`.This is turned off by default in order to
+        preserve the pixel-to-pixel variation in the drizzled weight maps.
 
     column_case : func
-        Function to apply to the catalog column names.  E.g., the default
-        `str.upper` results in uppercase column names
+        Function to apply to the catalog column names. E.g., the default
+        `str.upper` results in uppercase column names.
 
     save_to_fits : bool
-        Save catalog FITS file ``{root}.cat.fits``
+        Save catalog FITS file to ``{root}.cat.fits``.
 
     include_wcs_extension : bool
         An extension will be added to the FITS catalog with the detection
-        image WCS
+        image WCS.
 
     source_xy : (x, y) or (ra, dec) arrays
-        Force extraction positions.  If the arrays have units, then pass them
-        through the header WCS.  If no units, positions are *zero indexed*
-        array coordinates.
+        Force extraction positions. If the arrays have units, then pass
+        them through the header WCS. If no units, positions are
+        *zero indexed* array coordinates.
 
         To run with segmentation masking (`1sep > 1.10``), also provide
         `aseg` and `aseg_id` arrays with `source_xy`, like
-
             >>> source_xy = ra, dec, aseg, aseg_id
+        .
 
     compute_auto_quantities : bool
         Compute Kron/auto-like quantities with
-        `~grizli.prep.compute_SEP_auto_params`
+        `~grizli.prep.compute_SEP_auto_params`.
 
     autoparams : list
         Parameters of Kron/AUTO calculations with
@@ -151,64 +169,77 @@ def make_SEP_catalog(
 
     flux_radii : list
         Light fraction radii to compute with
-        `~grizli.prep.compute_SEP_auto_params`, e.g., ``[0.5]`` will calculate
-        the half-light radius (``FLUX_RADIUS``)
+        `~grizli.prep.compute_SEP_auto_params`, e.g., ``[0.5]`` will
+        calculate the half-light radius (``FLUX_RADIUS``).
 
     subpix : int
-        Pixel oversampling
+        Pixel oversampling.
 
     mask_kron : bool
-        Not used
+        Not used.
 
     max_total_corr : float
-        Not used
+        Not used.
 
     detection_params : dict
-        Parameters passed to `sep.extract`
+        Parameters passed to `sep.extract`.
 
     bkg_mask : array
-        Additional mask to apply to `sep.Background` calculation
+        Additional mask to apply to `sep.Background` calculation.
 
     pixel_scale : float
-        Not used
+        Not used.
 
     log : bool
-        Send log message to `grizli.utils.LOGFILE`
+        Send log message to `grizli.utils.LOGFILE`.
 
     gain : float
-        Gain value passed to `sep.sum_circle`
+        Gain value passed to `sep.sum_circle`.
 
     extract_pixstack : int
-        See `sep.set_extract_pixstack`
+        See `sep.set_extract_pixstack`.
 
     sub_object_limit : int
-        See `sep.set_sub_object_limit`
+        See `sep.set_sub_object_limit`.
 
     exposure_footprints : list, None
-        An optional list of objects that can be parsed with `sregion.SRegion`.  If
-        specified, add a column ``nexp`` to the catalog corresponding to the number
-        of entries in the list that overlap with a particular source position
+        An optional list of objects that can be parsed with
+        `sregion.SRegion`. If specified, add a column ``nexp`` to the
+        catalog corresponding to the number of entries in the list that
+        overlap with a particular source position.
+
+    seg_image : ndarray, optional
+        A 2D array of the segmentation map. Each unique value in the array
+        should correspond to the pixels associated with a specific object.
+        If not supplied, this will be generated instead using the SEP
+        implementation of SourceExtractor.
+
+    in_dir : str | os.PathLike, optional
+        The directory containing the necessary input files (e.g. drizzled
+        images). If not specified, files will be searched for in the
+        current working directory.
+
+    out_dir : str | os.PathLike, optional
+        The directory to which all output will be written. If not
+        specified, output files will be written to the current working
+        directory.
+
+    seg_out_path : str | os.PathLike, optional
+        The name or path to which the segmentation map will be saved.
+
+    **kwargs : dict, optional
+        Included in the original function, but seemingly not used.
 
     Returns
     -------
-    tab : `~astropy.table.Table`
-        Source catalog
-
-
+    `~astropy.table.Table`
+        Source catalog.
     """
+
     # if log:
     #     frame = inspect.currentframe()
     #     utils.log_function_arguments(utils.LOGFILE, frame,
     #                                 'prep.make_SEP_catalog', verbose=True)
-
-    import copy
-
-    import astropy.units as u
-
-    if detection_params is None:
-        detection_params = prep.SEP_DETECT_PARAMS
-    if phot_apertures is None:
-        phot_apertures = prep.SEXTRACTOR_PHOT_APERTURES
 
     sep.set_extract_pixstack(extract_pixstack)
     sep.set_sub_object_limit(sub_object_limit)
@@ -761,7 +792,7 @@ def make_SEP_catalog(
 
 
 def regen_multiband_catalogue(
-    field_root,
+    field_root="nis-wfss",
     threshold=1.8,
     detection_background=True,
     photometry_background=True,
@@ -775,8 +806,8 @@ def regen_multiband_catalogue(
     detection_root=None,
     output_root=None,
     use_psf_filter=True,
-    detection_params=None,
-    phot_apertures=None,
+    detection_params=prep.SEP_DETECT_PARAMS,
+    phot_apertures=prep.SEXTRACTOR_PHOT_APERTURES_ARCSEC,
     master_catalog=None,
     bkg_mask=None,
     bkg_params={"bw": 64, "bh": 64, "fw": 3, "fh": 3, "pixel_scale": 0.06},
@@ -789,12 +820,159 @@ def regen_multiband_catalogue(
     out_dir=None,
     seg_out_path=None,
 ):
+    """
+    Generate a catalogue and run aperture photometry on all objects.
+
+    This function was originally taken from
+    `~grizli.auto_script.multiband_catalog`, and has been modified in the
+    following ways:
+        - Add `in_dir` and `out_dir` parameters, so that the operations can
+        take place using files from one directory, but writing the output
+        to another.
+        - Add `seg_out_path` parameter, so that the name of the segmentation
+        map output can be specified.
+        - Add `seg_image` parameter. Using a fork of SEP (SEP>=1.3.0,
+        https://github.com/PJ-Watson/sep), passing an array here allows one
+        to skip the object detection, and instead derive all the catalogue
+        quantities for the specified objects.
+
+    Make a detection catalog and run aperture photometry on all available
+    filter images with the SourceExtractor clone `~sep`.
+
+    Parameters
+    ----------
+    field_root : str
+        Rootname of detection images and individual filter images (and
+        weights).
+
+    threshold : float
+        Detection threshold,  see `~grizli.prep.make_SEP_catalog`.
+
+    detection_background : bool
+        Background subtraction on detection image, see `get_background` on
+        `~grizli.prep.make_SEP_catalog`.
+
+    photometry_background : bool
+        Background subtraction when doing photometry on filter images,
+        see `get_background` on `~grizli.prep.make_SEP_catalog`.
+
+    get_all_filters : bool
+        Find all filter images available for `field_root`.
+
+    filters : list, None
+        Explicit list of filters to include, rather than all available.
+
+    det_err_scale : float
+        Uncertainty scaling for detection image, see `err_scale` on
+        `~grizli.prep.make_SEP_catalog`.
+
+    phot_err_scale : float
+        Uncertainty scaling for filter images, see `err_scale` on
+        `~grizli.prep.make_SEP_catalog`.
+
+    rescale_weight : bool
+        Rescale the weight images based on `sep.Background.rms` for both
+        detection and filter images, see `grizli.prep.make_SEP_catalog`.
+
+    run_detection : bool
+        Run the source detection. Can be False if the detection catalog
+        file (`master_catalog`) and segmentation image
+        (``{field_root}-{detection_filter}_seg.fits``) already exist,
+        i.e., from a separate call to `~grizli.prep.make_SEP_catalog`.
+
+    detection_filter : str
+        Filter image to use for the source detection.  The default `ir` is
+        the product of
+        `grizli.pipeline.auto_script.make_filter_combinations`. The
+        detection image filename will be
+        ``{field_root}-{detection_filter}_drz_sci.fits`` and with
+        associated weight image
+        ``{field_root}-{detection_filter}_drz_wht.fits``.
+
+    detection_root : str, None
+        Alternative rootname to use for the detection (and weight) image,
+        i.e., ``{detection_root}_drz_sci.fits``.
+        Note that the ``_drz_sci.fits`` suffixes are currently required by
+        `~grizli.prep.make_SEP_catalog`.
+
+    output_root : str, None
+        Rootname of the output catalog file to use, if desired other than
+        `field_root`.
+
+    use_psf_filter : bool
+        For HST, try to use the PSF as the convolution filter for source
+        detection.
+
+    detection_params : dict
+        Source detection parameters, see `~grizli.prep.make_SEP_catalog`.
+        Many of these are analogous to SourceExtractor parameters.
+
+    phot_apertures : list
+        Aperture *diameters*. If provided as a string, then apertures
+        assumed to be in pixel units. Can also provide a list of elements
+        with `~astropy.unit` attributes, which are converted to pixels
+        given the image WCS/pixel size. See
+        `~grizli.prep.make_SEP_catalog`.
+
+    master_catalog : str, None
+        Filename of the detection catalog, if None then build as
+        ``{field_root}-{detection_filter}.cat.fits``.
+
+    bkg_mask : array-like, None
+        Mask to use for the detection and photometry background
+        determination, see `~grizli.prep.make_SEP_catalog`. This has to be
+        the same dimensions as the images themselves.
+
+    bkg_params : dict
+        Background parameters, analogous to SourceExtractor, see
+        `~grizli.prep.make_SEP_catalog`.
+
+    use_bkg_err : bool
+        Use the background rms array determined by `sep` for the
+        uncertainties (see `sep.Background.rms`).
+
+    aper_segmask : bool
+        Use segmentation masking for the aperture photometry, see
+        `~grizli.prep.make_SEP_catalog`.
+
+    sci_image : array-like, None
+        Array itself to use for source detection, see
+        `~grizli.prep.make_SEP_catalog`.
+
+    clean_bkg : bool
+        If `True`, then the ``"*bkg.fits"`` files will be removed after
+        the catalogue is created.
+
+    seg_image : ndarray, optional
+        A 2D array of the segmentation map. Each unique value in the array
+        should correspond to the pixels associated with a specific object.
+        If not supplied, this will be generated instead using the SEP
+        implementation of SourceExtractor.
+
+    in_dir : str | os.PathLike, optional
+        The directory containing the necessary input files (e.g. drizzled
+        images). If not specified, files will be searched for in the
+        current working directory.
+
+    out_dir : str | os.PathLike, optional
+        The directory to which all output will be written. If not
+        specified, output files will be written to the current working
+        directory.
+
+    seg_out_path : str | os.PathLike, optional
+        The name or path to which the segmentation map will be saved.
+
+    Returns
+    -------
+    `~astropy.table.Table`
+        Catalog with detection parameters and aperture photometry.  This
+        is essentially the same as the output for
+        `~grizli.prep.make_SEP_catalog` but with separate photometry
+        columns for each multi-wavelength filter image found.
+    """
+
     if in_dir is not None:
         in_dir = Path(in_dir)
-    if detection_params is None:
-        detection_params = prep.SEP_DETECT_PARAMS
-    if phot_apertures is None:
-        phot_apertures = prep.SEXTRACTOR_PHOT_APERTURES_ARCSEC
 
     if detection_root is None:
         detection_root = "{0}-{1}".format(field_root, detection_filter)

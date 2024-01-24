@@ -59,7 +59,7 @@ exclude = [  # don't report on objects that match any of these regex
     'qt_utils*',
     'FLT_fns*',
     'GUI_main*',
-    'catalogue_fns*',
+    # 'catalogue_fns*',
 ]
 override_SS05 = [  # override SS05 to allow docstrings starting with these words
     '^Process ',
