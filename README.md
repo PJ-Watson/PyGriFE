@@ -33,7 +33,6 @@ First, begin by importing the main class.
 
 ```python
 from pygrife import GrismExtractor
-run_app()
 ```
 To instantiate the `GrismExtractor` object, we need to supply the `root_name` of the processed files, their current location (see [Necessary Files](#necessary-files)), and the output directory. `PyGriFE` copies the relevant files to the output directory, to preserve the originals and prevent any unexpected modifications.
 
