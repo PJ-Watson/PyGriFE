@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyGriFE"
-version = "0.0.2dev"
+version = "0.0.3dev"
 authors = [
   { name="Peter Watson", email="peter.watson+pyGFE@inaf.it" },
 ]

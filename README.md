@@ -94,3 +94,19 @@ ge.extract_spectra(
     z_range=[0.25,0.35],
 )
 ```
+
+## GUI
+
+`PyGriFE` also includes a graphical interface, to view and modify the segmentation map. This feature is under active development, but can be loaded by running:
+```python
+
+from GUI.seg_map_viewer import SegMapViewer as Viewer
+from PyQt6.QtWidgets import QApplication
+import sys
+
+app = QApplication(sys.argv)
+window = Viewer(input_dir = "/path/to/Prep/")
+window.showMaximized()
+app.exec()
+```
+Note that even when feature complete, at least one thread will be dedicated to running the GUI, and so the method detailed above in [Example](#example) will be slightly more performant.
