@@ -787,7 +787,7 @@ class WorkerSignals(QObject):
     finished = pyqtSignal()
     error = pyqtSignal(tuple)
     result = pyqtSignal(object)
-    progress = pyqtSignal(str)
+    progress = pyqtSignal(int, str)
 
 
 class Worker(QRunnable):

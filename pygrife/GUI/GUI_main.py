@@ -18,7 +18,7 @@ from astropy.visualization import (
     SqrtStretch,
 )
 
-# from grizli_extractor import GrizliExtractor
+# from grizli_extractor import GrismExtractor
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (
@@ -38,8 +38,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qt_utils import TerminalWindow, Worker, WriteStream
-from seg_map_viewer import FilesWindow, SegMapViewer, Separator, cQLineEdit
+
+from .qt_utils import TerminalWindow, Worker, WriteStream
+from .seg_map_viewer import FilesWindow, SegMapViewer, Separator, cQLineEdit
 
 
 class GrizliGUI(SegMapViewer):
@@ -56,7 +57,7 @@ class GrizliGUI(SegMapViewer):
         self.terminal_window = None
         self.extract_in_progress = False
 
-        self.prep_dir = None
+        self.input_dir = None
         self.field_name = ""
         self.new_directory = new_directory
         self.ge = None
@@ -76,7 +77,7 @@ class GrizliGUI(SegMapViewer):
             print("No segmentation mask loaded.")
             return
 
-        self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
+        self.new_dir_path = Path(self.input_dir.parent) / self.new_directory
         self.new_dir_path.mkdir(exist_ok=True, parents=True)
 
         with open(self.new_dir_path / "remapped_ids.json", "w") as f:
@@ -133,11 +134,11 @@ class GrizliGUI(SegMapViewer):
         print("Beginning extraction.")
         print(self.selected_ids)
 
-        self.new_dir_path = Path(self.prep_dir.parent) / self.new_directory
+        self.new_dir_path = Path(self.input_dir.parent) / self.new_directory
         self.new_dir_path.mkdir(exist_ok=True, parents=True)
 
         if self.ge is None:
-            self.ge = GrizliExtractor(self.field_name, self.prep_dir, self.new_dir_path)
+            self.ge = GrismExtractor(self.field_name, self.input_dir, self.new_dir_path)
         self.ge.load_seg_img(self.seg_data[::-1, :])
         self.ge.regen_multiband_catalogue()
         if not hasattr(self.ge, "grp"):
@@ -152,13 +153,13 @@ class GrizliFilesWindow(FilesWindow):
     def __init__(self, root):
         super().__init__(root)
 
-        self.prep_dir_line = cQLineEdit(parent=self, is_dir=True)
-        self.sub_layout.insertRow(0, "Prep Directory", self.prep_dir_line)
+        self.input_dir_line = cQLineEdit(parent=self, is_dir=True)
+        self.sub_layout.insertRow(0, "Input Directory", self.input_dir_line)
 
     def change_directory(self, event=None):
-        if self.prep_dir_line.text() is None or self.prep_dir_line.text() == "":
-            if self.root.prep_dir is not None:
-                init = str(prep_dir)
+        if self.input_dir_line.text() is None or self.input_dir_line.text() == "":
+            if self.root.input_dir is not None:
+                init = str(input_dir)
             elif self.recent_dir is None:
                 init = str(self.recent_dir)
             else:
@@ -166,16 +167,16 @@ class GrizliFilesWindow(FilesWindow):
 
             dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
             if dir_name:
-                self.root.prep_dir = Path(dir_name)
-                self.prep_dir_line.setText(str(self.root.prep_dir))
+                self.root.input_dir = Path(dir_name)
+                self.input_dir_line.setText(str(self.root.input_dir))
             else:
                 return
         else:
-            self.root.prep_dir = Path(self.prep_dir_line.text())
+            self.root.input_dir = Path(self.input_dir_line.text())
 
         try:
-            self.seg_line.setText(str([*self.root.prep_dir.glob("*ir_seg.fits")][0]))
-            self.root.field_name = [*self.root.prep_dir.glob("*ir_seg.fits")][
+            self.seg_line.setText(str([*self.root.input_dir.glob("*ir_seg.fits")][0]))
+            self.root.field_name = [*self.root.input_dir.glob("*ir_seg.fits")][
                 0
             ].stem.split("-ir_seg")[0]
         except:
@@ -185,7 +186,7 @@ class GrizliFilesWindow(FilesWindow):
             self.stack_line.setText(
                 str(
                     [
-                        *self.root.prep_dir.glob(
+                        *self.root.input_dir.glob(
                             f"*{self.root.field_name}-ir_drz_sci.fits"
                         )
                     ][0]
@@ -197,11 +198,11 @@ class GrizliFilesWindow(FilesWindow):
         try:
             for f, l in zip(self.root.filters, [self.b_line, self.g_line, self.r_line]):
                 l.setText(
-                    str([*self.root.prep_dir.glob(f"*{f.lower()}_drz_sci.fits")][0])
+                    str([*self.root.input_dir.glob(f"*{f.lower()}_drz_sci.fits")][0])
                 )
         except:
             print("Could not find all filter images.")
 
     def load_all(self):
-        self.root.prep_dir = Path(self.prep_dir_line.text())
+        self.root.input_dir = Path(self.input_dir_line.text())
         super().load_all()

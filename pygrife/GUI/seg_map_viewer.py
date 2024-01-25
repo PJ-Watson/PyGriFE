@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,21 +28,31 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QSlider,
     QVBoxLayout,
     QWidget,
 )
-from qt_utils import QtImageViewer, Worker, WorkerSignals
+
+from .qt_utils import QtImageViewer, Worker, WorkerSignals
 
 
 class SegMapViewer(QMainWindow):
-    def __init__(self, filters=["F115W", "F150W", "F200W"]):
+    def __init__(
+        self,
+        field_root: str = "nis-wfss",
+        detection_filter: str = "ir",
+        filters: list[str] = ["F115W", "F150W", "F200W"],
+        **kwargs,
+    ):
         super(SegMapViewer, self).__init__()
 
         self.threadpool = QThreadPool()
 
         self.filters = filters
+        self.field_root = field_root
+        self.detection_filter = detection_filter
 
         self.setWindowTitle("Object Selection")
 
@@ -52,7 +63,13 @@ class SegMapViewer(QMainWindow):
         self.layout_side = QVBoxLayout(self.left_toolbar)
         self.layout_side.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self.seg_dir = None
+        self.input_dir = None
+        self.seg_img_path = None
+        self.stack_img_path = None
+        self.r_img_path = None
+        self.g_img_path = None
+        self.b_img_path = None
+
         self.files_window = None
         dir_sel_button = QPushButton("Select Files", self)
         dir_sel_button.clicked.connect(self.open_files_window)
@@ -130,6 +147,16 @@ class SegMapViewer(QMainWindow):
         self.layout_side.addWidget(combine_button)
         self.layout_side.addWidget(save_button)
 
+        self.progress_bar = QProgressBar(self)
+        self.progress_label = QLabel("", self)
+        self.progress_title = QLabel("Loading:", self)
+        self.layout_side.addWidget(Separator())
+        self.layout_side.addWidget(self.progress_title)
+        self.layout_side.addWidget(self.progress_bar)
+        self.layout_side.addWidget(self.progress_label)
+        self.progress_bar.setHidden(True)
+        self.progress_label.setHidden(True)
+
         self.layout_h.addWidget(self.left_toolbar)
 
         self.viewer = QtImageViewer()
@@ -155,7 +182,9 @@ class SegMapViewer(QMainWindow):
         widget.setLayout(self.layout_h)
         self.setCentralWidget(widget)
 
-        # self.change_directory()
+        self.progress_popup = None
+
+        self.loader_fn(**kwargs)
 
     def open_files_window(self, event=None):
         if self.files_window is None:
@@ -301,10 +330,117 @@ class SegMapViewer(QMainWindow):
         )
         self.viewer.setImage(q_img)
 
-    def load_image(self, progress_callback):
+    def loader_fn(self, **kwargs):
+
+        worker = Worker(
+            self.load_image,
+            **kwargs,
+        )
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("")
+        self.progress_bar.setHidden(False)
+        self.progress_label.setHidden(False)
+        worker.signals.progress.connect(self.update_progress)
+        worker.signals.result.connect(self.set_img)
+        # worker.signals.finished.connect(self.cleanup_load)
+        self.threadpool.start(worker)
+
+    def update_progress(self, value, text):
+        print(text)
+        self.progress_bar.setValue(value)
+        self.progress_label.setText(text)
+
+    def test_path(
+        self, key: str, value: str | os.PathLike | None, is_dir: bool = False
+    ) -> bool:
+
+        if value is None:
+            return False
+
+        try:
+            test_path = Path(value)
+            if is_dir and test_path.is_dir():
+                setattr(self, key, test_path)
+            elif (not is_dir) and test_path.is_file():
+                setattr(self, key, test_path)
+            return True
+        except:
+            return False
+
+    def load_from_dir(self):
+
+        if self.input_dir is not None:
+            test_dir = Path(self.input_dir)
+        else:
+            test_dir = Path.home()
+
+        if self.seg_img_path is None:
+            try:
+                seg_img = [
+                    *test_dir.glob(
+                        f"{self.field_root}-{self.detection_filter}_seg.fits"
+                    )
+                ][0]
+                self.seg_img_path = seg_img
+            except:
+                print("Segmentation map not found.")
+
+        if self.stack_img_path is None:
+            try:
+                stack_img = [
+                    *test_dir.glob(
+                        f"{self.field_root}-{self.detection_filter}_drz_sci.fits"
+                    )
+                ][0]
+                self.stack_img_path = stack_img
+            except:
+                print("Stacked image not found.")
+
+        for f, l in zip(self.filters, ["b_img_path", "g_img_path", "r_img_path"]):
+            if getattr(self, l) is None:
+                try:
+                    filt_img = [
+                        *test_dir.glob(f"{self.field_root}-{f.lower()}_drz_sci.fits")
+                    ][0]
+                    setattr(self, l, filt_img)
+                except:
+                    print(f"Filter {f} image not found.")
+
+        return (
+            self.seg_img_path,
+            self.stack_img_path,
+            self.b_img_path,
+            self.g_img_path,
+            self.r_img_path,
+        )
+
+    def load_image(
+        self,
+        progress_callback=None,
+        # input_dir: str | os.PathLike | None = None,
+        # seg_img_path: str | os.PathLike | None = None,
+        # r_img_path: str | os.PathLike | None = None,
+        # g_img_path: str | os.PathLike | None = None,
+        # b_img_path: str | os.PathLike | None = None,
+        **kwargs,
+    ):
+        progress_callback.emit(10, "Locating files...")
+
+        if "input_dir" in kwargs:
+            self.test_path("input_dir", kwargs.pop("input_dir"), is_dir=True)
+
+        for k, v in kwargs.items():
+            self.test_path(k, v, is_dir=False)
+
+        if (self.seg_img_path is None) or (
+            None in [self.r_img_path, self.g_img_path, self.b_img_path]
+        ):
+            self.load_from_dir()
+
         t1 = time.time()
         # print ("Reading images...", end="\r")
-        progress_callback.emit("Reading images...")
+        progress_callback.emit(25, "Locating files... DONE")
+        progress_callback.emit(25, "Reading images...")
 
         with pf.open(self.seg_img_path) as hdul_seg:
             self.seg_mask = (hdul_seg[0].data > 0).astype("uint8")[::-1, :]
@@ -357,10 +493,10 @@ class SegMapViewer(QMainWindow):
             self.opacity_mask[~self.overlap_mask] = 0
         img_array = self.data_array.copy()
         # print ("Reading images... DONE", time.time()-t1)
-        progress_callback.emit("Reading images... DONE")
+        progress_callback.emit(50, "Reading images... DONE")
 
         # print ("Computing intervals...", end="\r")
-        progress_callback.emit("Computing intervals...")
+        progress_callback.emit(50, "Computing intervals...")
         self.interval_dict = {}
         percentiles = []
         for interval in self.interval_keys:
@@ -377,10 +513,10 @@ class SegMapViewer(QMainWindow):
             self.interval_dict["99.8%"][0], self.interval_dict["99.8%"][1]
         )
         # print ("Computing intervals... DONE", time.time()-t1)
-        progress_callback.emit("Computing intervals... DONE")
+        progress_callback.emit(75, "Computing intervals... DONE")
 
         # print ("Formatting image for display...", end="\r")
-        progress_callback.emit("Formatting image for display...")
+        progress_callback.emit(75, "Formatting image for display...")
         img_array[:, :, :-1] = self.stretch(self.interval(img_array[:, :, :-1]))
         self.img_array = (img_array * 255).astype("uint8")
 
@@ -410,10 +546,10 @@ class SegMapViewer(QMainWindow):
         )
         # self.viewer.setImage(self.q_img)
         # self.viewer.setBackgroundBrush(QColor(120,120,120))
-        progress_callback.emit("Formatting image for display... DONE")
+        progress_callback.emit(100, "Formatting image for display... DONE")
         # print ("Formatting image for display... DONE", time.time()-t1)
         # print (f"Completed in {(time.time()-t1):.2f}s")
-        progress_callback.emit(f"Completed in {(time.time()-t1):.2f}s")
+        progress_callback.emit(100, f"Completed in {(time.time()-t1):.2f}s")
 
         return self.q_img
 
@@ -486,6 +622,28 @@ class Separator(QFrame):
         self.setLineWidth(3)
 
 
+class PopUpWindow(QWidget):
+    def __init__(self):
+        QWidget.__init__(self)
+
+
+class LineBrowse(QWidget):
+    def __init__(self, is_dir=False):
+        super().__init__()
+        self.is_dir = is_dir
+
+        h_layout = QHBoxLayout()
+        h_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(h_layout)
+
+        self.line = QLineEdit(self)
+        h_layout.addWidget(self.line)
+
+        self.browse_button = QPushButton("Browse", self)
+        # self.browse_button.clicked.connect(self.change_directory)
+        h_layout.addWidget(self.browse_button)
+
+
 class cQLineEdit(QLineEdit):
     clicked = pyqtSignal()
 
@@ -529,22 +687,22 @@ class FilesWindow(QWidget):
         self.recent_dir = None
 
         dir_sel_button = QPushButton("Fill From Directory", self)
-        dir_sel_button.clicked.connect(self.change_directory)
+        dir_sel_button.clicked.connect(self.select_from_directory)
 
         self.sub_layout = QFormLayout()
         self.sub_layout.addRow(dir_sel_button)
         self.sub_layout.addRow(Separator())
-        self.seg_line = cQLineEdit(self)
+        self.seg_line = LineBrowse(self)
         self.sub_layout.addRow("Segmentation Map:", self.seg_line)
         self.sub_layout.addRow(Separator())
-        self.stack_line = cQLineEdit(self)
+        self.stack_line = LineBrowse(self)
         self.sub_layout.addRow("Stacked Image:", self.stack_line)
         self.sub_layout.addRow(Separator())
-        self.b_line = cQLineEdit(self)
+        self.b_line = LineBrowse(self)
         self.sub_layout.addRow("Blue:", self.b_line)
-        self.g_line = cQLineEdit(self)
+        self.g_line = LineBrowse(self)
         self.sub_layout.addRow("Green:", self.g_line)
-        self.r_line = cQLineEdit(self)
+        self.r_line = LineBrowse(self)
         self.sub_layout.addRow("Red:", self.r_line)
         self.v_layout.addLayout(self.sub_layout)
 
@@ -560,9 +718,9 @@ class FilesWindow(QWidget):
         self.setLayout(self.v_layout)
         self.setMinimumWidth(540)
 
-    def change_directory(self, event=None):
-        if self.root.seg_dir is not None:
-            init = str(seg_dir)
+    def select_from_directory(self, event=None):
+        if self.root.input_dir is not None:
+            init = str(self.root.input_dir)
         elif self.recent_dir is None:
             init = str(self.recent_dir)
         else:
@@ -570,47 +728,43 @@ class FilesWindow(QWidget):
 
         dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
         if dir_name:
-            self.seg_dir = Path(dir_name)
-            print(self.seg_dir)
-
-            try:
-                self.seg_line.setText(str([*self.seg_dir.glob("*ir_seg.fits")][0]))
-            except:
-                print("Segmentation map not found.")
-
-            try:
-                self.stack_line.setText(
-                    str([*self.seg_dir.glob("*ir_drz_sci.fits")][0])
-                )
-            except:
-                print("Stacked image not found.")
-
-            try:
-                for f, l in zip(
-                    self.root.filters, [self.b_line, self.g_line, self.r_line]
-                ):
-                    l.setText(
-                        str([*self.seg_dir.glob(f"*{f.lower()}_drz_sci.fits")][0])
-                    )
-            except:
-                print("Could not find all filter images.")
+            self.root.input_dir = Path(dir_name)
+            seg, stack, b, g, r = self.root.load_from_dir()
+            if seg is not None:
+                self.seg_line.line.setText(str(seg))
+            if stack is not None:
+                self.stack_line.line.setText(str(stack))
+            if b is not None:
+                self.b_line.line.setText(str(b))
+            if g is not None:
+                self.g_line.line.setText(str(g))
+            if r is not None:
+                self.r_line.line.setText(str(r))
 
     def load_all(self):
         self.load_all_button.setEnabled(False)
         self.progress_label.setHidden(False)
-        self.root.seg_img_path = Path(self.seg_line.text())
-        self.root.b_img_path = Path(self.b_line.text())
-        self.root.g_img_path = Path(self.g_line.text())
-        self.root.r_img_path = Path(self.r_line.text())
+        # self.root.seg_img_path = Path(self.seg_line.line.text())
+        # self.root.b_img_path = Path(self.b_line.text())
+        # self.root.g_img_path = Path(self.g_line.text())
+        # self.root.r_img_path = Path(self.r_line.text())
         # self.root.load_image()
-        worker = Worker(self.root.load_image)
+        worker = Worker(
+            self.root.load_image,
+            input_dir=self.root.input_dir,
+            seg_img_path=self.seg_line.line.text(),
+            r_img_path=self.r_line.line.text(),
+            g_img_path=self.g_line.line.text(),
+            b_img_path=self.b_line.line.text(),
+        )
         worker.signals.progress.connect(self.progress_fn)
         worker.signals.result.connect(self.root.set_img)
         worker.signals.finished.connect(self.cleanup_load)
         self.root.threadpool.start(worker)
 
-    def progress_fn(self, text):
-        self.progress_label.setText(text)
+    def progress_fn(self, value, text):
+        self.root.update_progress(value, text)
+        self.progress_label.setText(f"{value}% - {text}")
 
     def cleanup_load(self):
         self.load_all_button.setEnabled(True)
