@@ -40,14 +40,24 @@ from PyQt6.QtWidgets import (
 )
 
 from .qt_utils import TerminalWindow, Worker, WriteStream
-from .seg_map_viewer import FilesWindow, SegMapViewer, Separator, cQLineEdit
+from .seg_map_viewer import FilesWindow, LineBrowse, SegMapViewer, Separator
 
 
 class GrizliGUI(SegMapViewer):
     def __init__(
-        self, new_directory="ForcedExtractions", filters=["F115W", "F150W", "F200W"]
+        self,
+        field_root: str = "nis-wfss",
+        detection_filter: str = "ir",
+        filters: list[str] = ["F115W", "F150W", "F200W"],
+        new_dir: str = "ForcedExtractions",
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(
+            field_root=field_root,
+            detection_filter=detection_filter,
+            filters=filters,
+            **kwargs,
+        )
 
         self.layout_side.addWidget(Separator())
         self.extract_object_button = QPushButton("Extract Object", self)
@@ -57,9 +67,7 @@ class GrizliGUI(SegMapViewer):
         self.terminal_window = None
         self.extract_in_progress = False
 
-        self.input_dir = None
-        self.field_name = ""
-        self.new_directory = new_directory
+        self.new_dir = new_dir
         self.ge = None
 
     def open_files_window(self, event=None):
@@ -77,7 +85,7 @@ class GrizliGUI(SegMapViewer):
             print("No segmentation mask loaded.")
             return
 
-        self.new_dir_path = Path(self.input_dir.parent) / self.new_directory
+        self.new_dir_path = Path(self.input_dir.parent) / self.new_dir
         self.new_dir_path.mkdir(exist_ok=True, parents=True)
 
         with open(self.new_dir_path / "remapped_ids.json", "w") as f:
@@ -134,11 +142,11 @@ class GrizliGUI(SegMapViewer):
         print("Beginning extraction.")
         print(self.selected_ids)
 
-        self.new_dir_path = Path(self.input_dir.parent) / self.new_directory
+        self.new_dir_path = Path(self.input_dir.parent) / self.new_dir
         self.new_dir_path.mkdir(exist_ok=True, parents=True)
 
         if self.ge is None:
-            self.ge = GrismExtractor(self.field_name, self.input_dir, self.new_dir_path)
+            self.ge = GrismExtractor(self.field_root, self.input_dir, self.new_dir_path)
         self.ge.load_seg_img(self.seg_data[::-1, :])
         self.ge.regen_multiband_catalogue()
         if not hasattr(self.ge, "grp"):
@@ -153,56 +161,29 @@ class GrizliFilesWindow(FilesWindow):
     def __init__(self, root):
         super().__init__(root)
 
-        self.input_dir_line = cQLineEdit(parent=self, is_dir=True)
+        self.input_dir_line = LineBrowse(
+            parent=self, is_dir=True, root_name="input_dir"
+        )
         self.sub_layout.insertRow(0, "Input Directory", self.input_dir_line)
 
-    def change_directory(self, event=None):
-        if self.input_dir_line.text() is None or self.input_dir_line.text() == "":
-            if self.root.input_dir is not None:
-                init = str(input_dir)
-            elif self.recent_dir is None:
-                init = str(self.recent_dir)
-            else:
-                init = str(Path.home())
+    def select_from_directory(self, event=None):
+        if self.input_dir_line.line.text() is not (None or ""):
+            self._load_from_dir(self.input_dir_line.line.text())
+            return
 
-            dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
-            if dir_name:
-                self.root.input_dir = Path(dir_name)
-                self.input_dir_line.setText(str(self.root.input_dir))
-            else:
-                return
+        if self.root.input_dir is not None:
+            init = str(self.root.input_dir)
+        elif self.recent_dir is not None:
+            init = str(self.recent_dir)
         else:
-            self.root.input_dir = Path(self.input_dir_line.text())
+            init = str(Path.home())
 
-        try:
-            self.seg_line.setText(str([*self.root.input_dir.glob("*ir_seg.fits")][0]))
-            self.root.field_name = [*self.root.input_dir.glob("*ir_seg.fits")][
-                0
-            ].stem.split("-ir_seg")[0]
-        except:
-            print("Segmentation map not found.")
+        dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
 
-        try:
-            self.stack_line.setText(
-                str(
-                    [
-                        *self.root.input_dir.glob(
-                            f"*{self.root.field_name}-ir_drz_sci.fits"
-                        )
-                    ][0]
-                )
-            )
-        except:
-            print("Stacked image not found.")
+        if dir_name:
+            self._load_from_dir(dir_name)
+            self.input_dir_line.line.setText(str(dir_name))
 
-        try:
-            for f, l in zip(self.root.filters, [self.b_line, self.g_line, self.r_line]):
-                l.setText(
-                    str([*self.root.input_dir.glob(f"*{f.lower()}_drz_sci.fits")][0])
-                )
-        except:
-            print("Could not find all filter images.")
-
-    def load_all(self):
-        self.root.input_dir = Path(self.input_dir_line.text())
-        super().load_all()
+    def _load_from_dir(self, dir_name):
+        super()._load_from_dir(dir_name)
+        self.input_dir_line.line.setText(str(dir_name))

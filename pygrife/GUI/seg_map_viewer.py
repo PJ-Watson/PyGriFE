@@ -428,7 +428,6 @@ class SegMapViewer(QMainWindow):
 
         if "input_dir" in kwargs:
             self.test_path("input_dir", kwargs.pop("input_dir"), is_dir=True)
-
         for k, v in kwargs.items():
             self.test_path(k, v, is_dir=False)
 
@@ -439,6 +438,10 @@ class SegMapViewer(QMainWindow):
 
         t1 = time.time()
         # print ("Reading images...", end="\r")
+
+        if self.seg_img_path is None:
+            return
+
         progress_callback.emit(25, "Locating files... DONE")
         progress_callback.emit(25, "Reading images...")
 
@@ -554,8 +557,9 @@ class SegMapViewer(QMainWindow):
         return self.q_img
 
     def set_img(self, img):
-        self.viewer.setImage(img)
-        self.viewer.setBackgroundBrush(self.bkg_frm.bkg_col)
+        if img is not None:
+            self.viewer.setImage(img)
+            self.viewer.setBackgroundBrush(self.bkg_frm.bkg_col)
 
     def calc_interval_limits(self, percentiles):
         all_p = []
@@ -628,7 +632,15 @@ class PopUpWindow(QWidget):
 
 
 class LineBrowse(QWidget):
-    def __init__(self, is_dir=False):
+    clicked = pyqtSignal()
+
+    def __init__(
+        self,
+        parent,
+        is_dir: bool = False,
+        root_name: str = "",
+    ):
+
         super().__init__()
         self.is_dir = is_dir
 
@@ -640,32 +652,25 @@ class LineBrowse(QWidget):
         h_layout.addWidget(self.line)
 
         self.browse_button = QPushButton("Browse", self)
-        # self.browse_button.clicked.connect(self.change_directory)
+        self.browse_button.clicked.connect(self.browse_filesystem)
         h_layout.addWidget(self.browse_button)
 
+        if root_name != "" and getattr(parent.root, root_name, None) is not None:
+            self.line.setText(str(getattr(parent.root, root_name, None)))
 
-class cQLineEdit(QLineEdit):
-    clicked = pyqtSignal()
-
-    def __init__(self, is_dir=False, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.is_dir = is_dir
-
-    def mousePressEvent(self, QMouseEvent):
-        # print (self.text())
-        # print (self.parent())
-        if (self.text is None or self.text == "") and (
+    def browse_filesystem(self, QMouseEvent):
+        if (self.line.text is None or self.line.text == "") and (
             self.parent().recent_dir is None
         ):
             init = str(Path.home())
         else:
-            init = self.text()
+            init = self.line.text()
 
         if self.is_dir:
             f = QFileDialog.getExistingDirectory(self, "Select File", init)
 
             if f:
-                self.setText(f)
+                self.line.setText(f)
                 self.parent().recent_dir = f
         else:
             f, _ = QFileDialog.getOpenFileName(
@@ -673,7 +678,7 @@ class cQLineEdit(QLineEdit):
             )
 
             if f:
-                self.setText(f)
+                self.line.setText(f)
                 self.parent().recent_dir = Path(f).parent
 
 
@@ -692,17 +697,17 @@ class FilesWindow(QWidget):
         self.sub_layout = QFormLayout()
         self.sub_layout.addRow(dir_sel_button)
         self.sub_layout.addRow(Separator())
-        self.seg_line = LineBrowse(self)
+        self.seg_line = LineBrowse(self, root_name="seg_img_path")
         self.sub_layout.addRow("Segmentation Map:", self.seg_line)
         self.sub_layout.addRow(Separator())
-        self.stack_line = LineBrowse(self)
+        self.stack_line = LineBrowse(self, root_name="stack_img_path")
         self.sub_layout.addRow("Stacked Image:", self.stack_line)
         self.sub_layout.addRow(Separator())
-        self.b_line = LineBrowse(self)
+        self.b_line = LineBrowse(self, root_name="b_img_path")
         self.sub_layout.addRow("Blue:", self.b_line)
-        self.g_line = LineBrowse(self)
+        self.g_line = LineBrowse(self, root_name="g_img_path")
         self.sub_layout.addRow("Green:", self.g_line)
-        self.r_line = LineBrowse(self)
+        self.r_line = LineBrowse(self, root_name="g_img_path")
         self.sub_layout.addRow("Red:", self.r_line)
         self.v_layout.addLayout(self.sub_layout)
 
@@ -721,34 +726,33 @@ class FilesWindow(QWidget):
     def select_from_directory(self, event=None):
         if self.root.input_dir is not None:
             init = str(self.root.input_dir)
-        elif self.recent_dir is None:
+        elif self.recent_dir is not None:
             init = str(self.recent_dir)
         else:
             init = str(Path.home())
 
         dir_name = QFileDialog.getExistingDirectory(self, "Open directory", init)
+
         if dir_name:
-            self.root.input_dir = Path(dir_name)
-            seg, stack, b, g, r = self.root.load_from_dir()
-            if seg is not None:
-                self.seg_line.line.setText(str(seg))
-            if stack is not None:
-                self.stack_line.line.setText(str(stack))
-            if b is not None:
-                self.b_line.line.setText(str(b))
-            if g is not None:
-                self.g_line.line.setText(str(g))
-            if r is not None:
-                self.r_line.line.setText(str(r))
+            self._load_from_dir(dir_name)
+
+    def _load_from_dir(self, dir_name):
+        self.root.input_dir = Path(dir_name)
+        seg, stack, b, g, r = self.root.load_from_dir()
+        if seg is not None:
+            self.seg_line.line.setText(str(seg))
+        if stack is not None:
+            self.stack_line.line.setText(str(stack))
+        if b is not None:
+            self.b_line.line.setText(str(b))
+        if g is not None:
+            self.g_line.line.setText(str(g))
+        if r is not None:
+            self.r_line.line.setText(str(r))
 
     def load_all(self):
         self.load_all_button.setEnabled(False)
         self.progress_label.setHidden(False)
-        # self.root.seg_img_path = Path(self.seg_line.line.text())
-        # self.root.b_img_path = Path(self.b_line.text())
-        # self.root.g_img_path = Path(self.g_line.text())
-        # self.root.r_img_path = Path(self.r_line.text())
-        # self.root.load_image()
         worker = Worker(
             self.root.load_image,
             input_dir=self.root.input_dir,
