@@ -141,4 +141,4 @@ To run the GUI, the following packages are also required:
  - [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) 6.6 or later
  - [qimage2ndarray](https://github.com/hmeine/qimage2ndarray) 1.10 or later
 
-`pyGCG` has been tested with Python 3.10, and is developed primarily on Python 3.11.
+`PyGriFE` has been tested with Python 3.10, and is developed primarily on Python 3.11.

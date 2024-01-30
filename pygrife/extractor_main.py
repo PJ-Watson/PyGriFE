@@ -78,8 +78,9 @@ except:
     raise RuntimeError("""
         Either the grizli environment variables are not set correctly,
         or the directories they point to do not yet exist.
-        Check that the environment is correctly configured, or edit and
-        uncomment the lines above.
+        Check that the environment is correctly configured
+        (https://grizli.readthedocs.io/en/latest/grizli/install.html),
+        or edit and uncomment the lines above.
     """)
 
 import eazy
