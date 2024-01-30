@@ -440,6 +440,7 @@ class SegMapViewer(QMainWindow):
         # print ("Reading images...", end="\r")
 
         if self.seg_img_path is None:
+            progress_callback.emit(100, "No files found.")
             return
 
         progress_callback.emit(25, "Locating files... DONE")

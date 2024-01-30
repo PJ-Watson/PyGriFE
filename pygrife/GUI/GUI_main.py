@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 
@@ -43,13 +44,14 @@ from .qt_utils import TerminalWindow, Worker, WriteStream
 from .seg_map_viewer import FilesWindow, LineBrowse, SegMapViewer, Separator
 
 
-class GrizliGUI(SegMapViewer):
+class ExtractorGUI(SegMapViewer):
     def __init__(
         self,
         field_root: str = "nis-wfss",
         detection_filter: str = "ir",
         filters: list[str] = ["F115W", "F150W", "F200W"],
-        new_dir: str = "ForcedExtractions",
+        new_dir_name: str | None = "ForcedExtractions",
+        new_dir_path: str | os.PathLike | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -67,7 +69,6 @@ class GrizliGUI(SegMapViewer):
         self.terminal_window = None
         self.extract_in_progress = False
 
-        self.new_dir = new_dir
         self.ge = None
 
     def open_files_window(self, event=None):
@@ -85,16 +86,15 @@ class GrizliGUI(SegMapViewer):
             print("No segmentation mask loaded.")
             return
 
-        self.new_dir_path = Path(self.input_dir.parent) / self.new_dir
-        self.new_dir_path.mkdir(exist_ok=True, parents=True)
+        out_dir_path = self._setup_new_dir()
 
-        with open(self.new_dir_path / "remapped_ids.json", "w") as f:
+        with open(out_dir_path / "remapped_ids.json", "w") as f:
             json.dump(self.remapped_ids, f)
 
         with pf.open(self.seg_img_path) as seg_hdul:
             seg_hdul[0].data = self.seg_data[::-1, :]
 
-            seg_hdul.writeto(self.new_dir_path / self.seg_img_path.name, overwrite=True)
+            seg_hdul.writeto(out_dir_path / self.seg_img_path.name, overwrite=True)
 
     def receiver_fn(self, queue, progress_callback=None):
         while self.extract_in_progress:
@@ -128,6 +128,20 @@ class GrizliGUI(SegMapViewer):
         self.extract_object_button.setEnabled(True)
         sys.stdout = sys.__stdout__
 
+    def _setup_new_dir(self) -> os.PathLike:
+
+        if self.new_dir_path is not None:
+            out_dir_path = Path(self.new_dir_path)
+        elif self.new_dir_name is not None:
+            out_dir_path = Path(self.input_dir.parent) / self.new_dir_name
+        else:
+            raise NameError(
+                "Either the path or name of the output directory must be supplied."
+            )
+
+        out_dir_path.mkdir(exist_ok=True, parents=True)
+        return out_dir_path
+
     def extract_object(self, event=None, progress_callback=None):
         # import logging
         # root = logging.getLogger()
@@ -142,11 +156,14 @@ class GrizliGUI(SegMapViewer):
         print("Beginning extraction.")
         print(self.selected_ids)
 
-        self.new_dir_path = Path(self.input_dir.parent) / self.new_dir
-        self.new_dir_path.mkdir(exist_ok=True, parents=True)
+        out_dir_path = self._setup_new_dir()
 
         if self.ge is None:
-            self.ge = GrismExtractor(self.field_root, self.input_dir, self.new_dir_path)
+            self.ge = GrismExtractor(
+                field_root=self.field_root,
+                in_dir=self.input_dir,
+                out_dir=out_dir_path,
+            )
         self.ge.load_seg_img(self.seg_data[::-1, :])
         self.ge.regen_multiband_catalogue()
         if not hasattr(self.ge, "grp"):
@@ -187,3 +204,18 @@ class GrizliFilesWindow(FilesWindow):
     def _load_from_dir(self, dir_name):
         super()._load_from_dir(dir_name)
         self.input_dir_line.line.setText(str(dir_name))
+
+
+def run_GUI(name: str = "extractor", **kwargs):
+
+    if name.lower() == "extractor":
+        GUI = ExtractorGUI
+    elif name.lower() == "viewer":
+        GUI = SegMapViewer
+    else:
+        raise NameError("Please specify one of `extractor` or `viewer`.")
+
+    app = QApplication(sys.argv)
+    window = GUI(**kwargs)
+    window.showMaximized()
+    sys.exit(app.exec())

@@ -108,15 +108,9 @@ pip install .[GUI]
 The GUI itself can be used by running the following:
 
 ```python
+from pygrifes.GUI import run_GUI
 
-from GUI.seg_map_viewer import SegMapViewer as Viewer
-from PyQt6.QtWidgets import QApplication
-import sys
-
-app = QApplication(sys.argv)
-window = Viewer(input_dir = "/path/to/Prep/")
-window.showMaximized()
-app.exec()
+run_GUI()
 ```
 Note that even when feature complete, at least one thread will be dedicated to running the GUI, and so the method detailed above in [Example](#example) will be slightly more performant.
 
