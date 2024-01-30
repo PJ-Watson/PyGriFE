@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0","oldest-supported-numpy", "wheel", "Cython"]
+requires = ["setuptools>=61.0","oldest-supported-numpy", "wheel", "Cython", "setuptools_scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "PyGriFE"
-version = "0.0.3dev"
+dynamic = ["version"]
 authors = [
   { name="Peter Watson", email="peter.watson+pyGFE@inaf.it" },
 ]
@@ -74,3 +74,6 @@ override_SS05 = [  # override SS05 to allow docstrings starting with these words
     '^Assess ',
     '^Access ',
 ]
+
+[tool.setuptools_scm]
+version_file = "pygrife/_version.py"

@@ -108,7 +108,7 @@ pip install .[GUI]
 The GUI itself can be used by running the following:
 
 ```python
-from pygrifes.GUI import run_GUI
+from pygrife.GUI import run_GUI
 
 run_GUI()
 ```
