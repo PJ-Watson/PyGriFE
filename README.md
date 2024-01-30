@@ -19,6 +19,10 @@ To build and install `PyGriFE`, run (from the root of the source tree):
 ```
 pip install .
 ```
+Alternatively, if [`grizli`](https://github.com/gbrammer/grizli) and [`sep`](https://github.com/kbarbary/sep) are not already installed in the environment, they can be installed by running:
+```
+pip install .[grizli,sep]
+```
 
 ## Necessary Files
 
@@ -95,9 +99,14 @@ ge.extract_spectra(
 )
 ```
 
-## GUI
+## Running the GUI
 
-`PyGriFE` also includes a graphical interface, to view and modify the segmentation map. This feature is under active development, but can be loaded by running:
+`PyGriFE` also includes a graphical interface, to view and modify the segmentation map. This feature is under active development, but can be run after installing the optional dependencies (see [below](#gui) for more details):
+```
+pip install .[GUI]
+```
+The GUI itself can be used by running the following:
+
 ```python
 
 from GUI.seg_map_viewer import SegMapViewer as Viewer
@@ -110,3 +119,26 @@ window.showMaximized()
 app.exec()
 ```
 Note that even when feature complete, at least one thread will be dedicated to running the GUI, and so the method detailed above in [Example](#example) will be slightly more performant.
+
+## Requirements
+
+`PyGriFE` currently has the following requirements:
+ - [Python](https://www.python.org/) 3.10 or later
+ - [Astropy](https://www.astropy.org/) 5.3 or later
+ - [NumPy](https://www.numpy.org/) 1.24 or later
+ - [Matplotlib](https://matplotlib.org/) 3.6 or later
+ - [tqdm](https://tqdm.github.io/) 4.66 or later
+ - [regions](https://astropy-regions.readthedocs.io) 0.8 or later
+
+### Grizli
+To extract objects, a working installation of [`grizli`](https://github.com/gbrammer/grizli) is required. `PyGriFE` modifies some of the `grizli` class methods in order to extract arbitrary regions, and cannot be guaranteed to work with every version (if `PyGriFE` encounters any compatibility problems, please raise an issue [here](https://github.com/PJ-Watson/PyGriFE/issues), rather than bothering the `grizli` developers). The current tested version is `grizli==1.11`.
+
+### SEP
+Both `PyGriFE` and `grizli` rely on [`SEP`](https://github.com/kbarbary/sep), the Python implementation of [Source Extractor](http://www.astromatic.net/software/sextractor) ([Bertin & Arnouts 1996](http://adsabs.harvard.edu/abs/1996A%26AS..117..393B)). Unfortunately, since the original repository no longer appears to be maintained, it is necessary to install the fork maintained at [PJ-Watson/sep](https://github.com/PJ-Watson/sep). This includes the functionality necessary to rebuild a catalogue from an existing segmentation map.
+
+### GUI
+To run the GUI, the following packages are also required:
+ - [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) 6.6 or later
+ - [qimage2ndarray](https://github.com/hmeine/qimage2ndarray) 1.10 or later
+
+`pyGCG` has been tested with Python 3.10, and is developed primarily on Python 3.11.
