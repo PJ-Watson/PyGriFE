@@ -87,7 +87,8 @@ import eazy
 import grizli
 from grizli import fitting, jwst_utils, model, multifit, prep, utils
 from grizli.pipeline import auto_script, photoz
-from grizli_functions import FLT_fns, catalogue_fns
+
+from .grizli_functions import FLT_fns, catalogue_fns
 
 multifit._loadFLT = FLT_fns.load_and_mod_FLT
 model.GrismFLT.transform_JWST_WFSS = FLT_fns.mod_transform_JWST_WFSS
