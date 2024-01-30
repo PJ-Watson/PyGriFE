@@ -578,9 +578,25 @@ class QtImageViewer(QGraphicsView):
                     del self.zoomStack[:-1]
                 zoomRect = self.zoomStack[-1]
                 center = zoomRect.center()
-                zoomRect.setWidth(zoomRect.width() * self.wheelZoomFactor)
-                zoomRect.setHeight(zoomRect.height() * self.wheelZoomFactor)
-                zoomRect.moveCenter(center)
+
+                new_center = self.mapToScene(event.position().toPoint())  # Scene coords
+                zoomRect.setLeft(
+                    new_center.x()
+                    - (new_center.x() - zoomRect.left()) * self.wheelZoomFactor
+                )
+                zoomRect.setRight(
+                    new_center.x()
+                    + (zoomRect.right() - new_center.x()) * self.wheelZoomFactor
+                )
+                zoomRect.setBottom(
+                    new_center.y()
+                    - (new_center.y() - zoomRect.bottom()) * self.wheelZoomFactor
+                )
+                zoomRect.setTop(
+                    new_center.y()
+                    + (zoomRect.top() - new_center.y()) * self.wheelZoomFactor
+                )
+
                 self.zoomStack[-1] = zoomRect.intersected(self.sceneRect())
                 if self.zoomStack[-1] == self.sceneRect():
                     self.zoomStack = []
