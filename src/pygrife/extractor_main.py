@@ -320,8 +320,8 @@ class GrismExtractor:
 
         Notes
         -----
-        Be careful with the cpu_count - the memory footprint per process
-        is extremely high (e.g. with a 6P/8E CPU, and 32GB RAM, I
+        Be careful with the ``cpu_count`` - the memory footprint per
+        process is extremely high (e.g. with a 6P/8E CPU, and 32GB RAM, I
         typically limit this to <=6 cores).
         """
 

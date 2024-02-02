@@ -37,6 +37,12 @@ GUI = [
     "pyqt6>=6.6.0",
     "qimage2ndarray @ git+https://github.com/hmeine/qimage2ndarray",
 ]
+docs = [
+    "sphinx-copybutton>=0.5",
+    "sphinx>=7.2",
+    "numpydoc>=1.6",
+    "furo>=2024.1",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/PJ-Watson/PyGriFE"
