@@ -9,6 +9,7 @@ from queue import Queue
 
 import astropy.io.fits as pf
 import numpy as np
+import PyQt6
 import qimage2ndarray
 from astropy import wcs
 from astropy.visualization import (
@@ -18,8 +19,6 @@ from astropy.visualization import (
     ManualInterval,
     SqrtStretch,
 )
-
-# from grizli_extractor import GrismExtractor
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QPainter, QPalette, QPixmap
 from PyQt6.QtWidgets import (

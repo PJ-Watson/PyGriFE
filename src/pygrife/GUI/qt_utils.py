@@ -9,87 +9,44 @@ import sys
 import traceback
 from queue import Queue
 
-try:
-    from PyQt6.QtCore import (
-        QEvent,
-        QObject,
-        QPoint,
-        QPointF,
-        QRectF,
-        QRunnable,
-        QSize,
-        Qt,
-        QThreadPool,
-        pyqtSignal,
-        pyqtSlot,
-    )
-    from PyQt6.QtGui import (
-        QImage,
-        QMouseEvent,
-        QPainter,
-        QPainterPath,
-        QPen,
-        QPixmap,
-        QTextCursor,
-    )
-    from PyQt6.QtWidgets import (
-        QFileDialog,
-        QFormLayout,
-        QGraphicsEllipseItem,
-        QGraphicsItem,
-        QGraphicsLineItem,
-        QGraphicsPolygonItem,
-        QGraphicsRectItem,
-        QGraphicsScene,
-        QGraphicsView,
-        QPushButton,
-        QSizePolicy,
-        QTextEdit,
-        QVBoxLayout,
-        QWidget,
-    )
-except ImportError:
-    try:
-        from PyQt5.QtCore import (
-            QEvent,
-            QObject,
-            QPoint,
-            QPointF,
-            QRectF,
-            QRunnable,
-            QSize,
-            Qt,
-            QThreadPool,
-            pyqtSignal,
-            pyqtSlot,
-        )
-        from PyQt5.QtGui import (
-            QImage,
-            QMouseEvent,
-            QPainter,
-            QPainterPath,
-            QPen,
-            QPixmap,
-            QTextCursor,
-        )
-        from PyQt5.QtWidgets import (
-            QFileDialog,
-            QFormLayout,
-            QGraphicsEllipseItem,
-            QGraphicsItem,
-            QGraphicsLineItem,
-            QGraphicsPolygonItem,
-            QGraphicsRectItem,
-            QGraphicsScene,
-            QGraphicsView,
-            QPushButton,
-            QSizePolicy,
-            QTextEdit,
-            QVBoxLayout,
-            QWidget,
-        )
-    except ImportError:
-        raise ImportError("Requires PyQt (version 5 or 6)")
+from PyQt6.QtCore import (
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QRectF,
+    QRunnable,
+    QSize,
+    Qt,
+    QThreadPool,
+    pyqtSignal,
+    pyqtSlot,
+)
+from PyQt6.QtGui import (
+    QImage,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QTextCursor,
+)
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QFormLayout,
+    QGraphicsEllipseItem,
+    QGraphicsItem,
+    QGraphicsLineItem,
+    QGraphicsPolygonItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QPushButton,
+    QSizePolicy,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 # numpy is optional: only needed if you want to display numpy 2d arrays as images.
 try:
@@ -106,56 +63,67 @@ try:
 except ImportError:
     qimage2ndarray = None
 
-__author__ = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
-__version__ = "2.0.0"
+original_author = "Marcel Goldschen-Ohm <marcel.goldschen@gmail.com>"
+original_version = "2.0.0"
 # Modified in part by PJW
 
 
 class QtImageViewer(QGraphicsView):
-    """PyQt image viewer widget based on QGraphicsView with mouse zooming/panning and ROIs.
+    """
+    A PyQt image viewer widget based on QGraphicsView.
 
-    Image File:
-    -----------
-    Use the open("path/to/file") method to load an image file into the viewer.
-    Calling open() without a file argument will popup a file selection dialog.
+    This widget includes mouse zooming/panning and ROIs.
 
-    Image:
-    ------
-    Use the setImage(im) method to set the image data in the viewer.
-        - im can be a QImage, QPixmap, or NumPy 2D array (the later requires the package qimage2ndarray).
-        For display in the QGraphicsView the image will be converted to a QPixmap.
-
-    Some useful image format conversion utilities:
-        qimage2ndarray: NumPy ndarray <==> QImage    (https://github.com/hmeine/qimage2ndarray)
-        ImageQt: PIL Image <==> QImage  (https://github.com/python-pillow/Pillow/blob/master/PIL/ImageQt.py)
-
-    Mouse:
-    ------
-    Mouse interactions for zooming and panning is fully customizable by simply setting the desired button interactions:
-    e.g.,
-        regionZoomButton = Qt.LeftButton  # Drag a zoom box.
-        zoomOutButton = Qt.RightButton  # Pop end of zoom stack (double click clears zoom stack).
-        panButton = Qt.MiddleButton  # Drag to pan.
-        wheelZoomFactor = 1.25  # Set to None or 1 to disable mouse wheel zoom.
-
-    To disable any interaction, just disable its button.
-    e.g., to disable panning:
-        panButton = None
-
-    ROIs:
-    -----
-    Can also add ellipse, rectangle, line, and polygon ROIs to the image.
-    ROIs should be derived from the provided EllipseROI, RectROI, LineROI, and PolygonROI classes.
-    ROIs are selectable and optionally moveable with the mouse (see setROIsAreMovable).
-
-    TODO: Add support for editing the displayed image contrast.
-    TODO: Add support for drawing ROIs with the mouse.
+    Class Attributes
+    ----------------
+    leftMouseButtonPressed : `PyQt6.QtCore.pyqtSignal`
+        Test
     """
 
+    # PyQt image viewer widget based on QGraphicsView with mouse zooming/panning and ROIs.
+
+    # Image File:
+    # -----------
+    # Use the open("path/to/file") method to load an image file into the viewer.
+    # Calling open() without a file argument will popup a file selection dialog.
+
+    # Image:
+    # ------
+    # Use the setImage(im) method to set the image data in the viewer.
+    #     - im can be a QImage, QPixmap, or NumPy 2D array (the later requires the package qimage2ndarray).
+    #     For display in the QGraphicsView the image will be converted to a QPixmap.
+
+    # Some useful image format conversion utilities:
+    #     qimage2ndarray: NumPy ndarray <==> QImage    (https://github.com/hmeine/qimage2ndarray)
+    #     ImageQt: PIL Image <==> QImage  (https://github.com/python-pillow/Pillow/blob/master/PIL/ImageQt.py)
+
+    # Mouse:
+    # ------
+    # Mouse interactions for zooming and panning is fully customizable by simply setting the desired button interactions:
+    # e.g.,
+    #     regionZoomButton = Qt.LeftButton  # Drag a zoom box.
+    #     zoomOutButton = Qt.RightButton  # Pop end of zoom stack (double click clears zoom stack).
+    #     panButton = Qt.MiddleButton  # Drag to pan.
+    #     wheelZoomFactor = 1.25  # Set to None or 1 to disable mouse wheel zoom.
+
+    # To disable any interaction, just disable its button.
+    # e.g., to disable panning:
+    #     panButton = None
+
+    # ROIs:
+    # -----
+    # Can also add ellipse, rectangle, line, and polygon ROIs to the image.
+    # ROIs should be derived from the provided EllipseROI, RectROI, LineROI, and PolygonROI classes.
+    # ROIs are selectable and optionally moveable with the mouse (see setROIsAreMovable).
+
+    # TODO: Add support for editing the displayed image contrast.
+    # TODO: Add support for drawing ROIs with the mouse.
+    #
+
     # Mouse button signals emit image scene (x, y) coordinates.
-    # !!! For image (row, column) matrix indexing, row = y and column = x.
-    # !!! These signals will NOT be emitted if the event is handled by an interaction such as zoom or pan.
-    # !!! If aspect ratio prevents image from filling viewport, emitted position may be outside image bounds.
+    # > For image (row, column) matrix indexing, row = y and column = x.
+    # > These signals will NOT be emitted if the event is handled by an interaction such as zoom or pan.
+    # > If aspect ratio prevents image from filling viewport, emitted position may be outside image bounds.
     leftMouseButtonPressed = pyqtSignal(float, float)
     leftMouseButtonReleased = pyqtSignal(Qt.KeyboardModifier, float, float)
     middleMouseButtonPressed = pyqtSignal(float, float)
@@ -170,7 +138,7 @@ class QtImageViewer(QGraphicsView):
 
     # Emitted on mouse motion.
     # Emits mouse position over image in image pixel coordinates.
-    # !!! setMouseTracking(True) if you want to use this at all times.
+    # > setMouseTracking(True) if you want to use this at all times.
     mousePositionOnImageChanged = pyqtSignal(QPoint)
 
     # Emit index of selected ROI
@@ -203,8 +171,8 @@ class QtImageViewer(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         # Interactions (set buttons to None to disable interactions)
-        # !!! Events handled by interactions will NOT emit *MouseButton* signals.
-        #     Note: regionZoomButton will still emit a *MouseButtonReleased signal on a click (i.e. tiny box).
+        # > Events handled by interactions will NOT emit `MouseButton`` signals.
+        # > Note: regionZoomButton will still emit a `MouseButtonReleased`` signal on a click (i.e. tiny box).
         self.regionZoomButton = Qt.MouseButton.LeftButton  # Drag a zoom box.
         self.zoomOutButton = (
             Qt.MouseButton.RightButton
@@ -213,7 +181,7 @@ class QtImageViewer(QGraphicsView):
         self.wheelZoomFactor = 1.25  # Set to None or 1 to disable mouse wheel zoom.
 
         # Stack of QRectF zoom boxes in scene coordinates.
-        # !!! If you update this manually, be sure to call updateViewer() to reflect any changes.
+        # > If you update this manually, be sure to call updateViewer() to reflect any changes.
         self.zoomStack = []
 
         # Flags for active zooming/panning.
@@ -236,39 +204,77 @@ class QtImageViewer(QGraphicsView):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def sizeHint(self):
+        """
+        Returns a hint for the size of the current scene.
+
+        Returns
+        -------
+        `PyQt6.QtCore.QSize`
+            A suggested size.
+        """
         return QSize(900, 600)
 
     def hasImage(self):
-        """Returns whether the scene contains an image pixmap."""
+        """
+        Check if the scene contains an image pixmap.
+
+        Returns
+        -------
+        bool
+            ``True`` if the scene contains an image.
+        """
         return self._image is not None
 
     def clearImage(self):
-        """Removes the current image pixmap from the scene if it exists."""
+        """
+        Removes the current image pixmap from the scene if it exists.
+        """
         if self.hasImage():
             self.scene.removeItem(self._image)
             self._image = None
 
     def pixmap(self):
-        """Returns the scene's current image pixmap as a QPixmap, or else None if no image exists.
-        :rtype: QPixmap | None
+        """
+        Returns the scene's current image pixmap.
+
+        Returns
+        -------
+        `PyQt6.QtGui.QPixmap` or None
+            The current scene image, if it exists.
         """
         if self.hasImage():
             return self._image.pixmap()
         return None
 
     def image(self):
-        """Returns the scene's current image pixmap as a QImage, or else None if no image exists.
-        :rtype: QImage | None
+        """
+        Returns the scene's current image as a QImage.
+
+        Returns
+        -------
+        `PyQt6.QtGui.QImage` or None
+            The current scene image, if it exists.
         """
         if self.hasImage():
             return self._image.pixmap().toImage()
         return None
 
     def setImage(self, image):
-        """Set the scene's current image pixmap to the input QImage or QPixmap.
-        Raises a RuntimeError if the input image has type other than QImage or QPixmap.
-        :type image: QImage | QPixmap
         """
+        Set the scene's current image pixmap to the input.
+
+        Parameters
+        ----------
+        image :  `PyQt.QtGui.QImage` or `PyQt.QtGui.QPixmap`
+            The input image.
+
+        Raises
+        ------
+        RuntimeError
+            Raised if the input image has type other than
+            `PyQt6.QtGui.QImage` or `PyQt6.QtGui.QPixmap`.
+        """
+
         if type(image) is QPixmap:
             pixmap = image
         elif type(image) is QImage:
@@ -308,9 +314,14 @@ class QtImageViewer(QGraphicsView):
         self.updateViewer()
 
     def open(self, filepath=None):
-        """Load an image from file.
-        Without any arguments, loadImageFromFile() will pop up a file dialog to choose the image file.
-        With a fileName argument, loadImageFromFile(fileName) will attempt to load the specified image file directly.
+        """
+        Load an image from file.
+
+        Parameters
+        ----------
+        filepath : str or os.PathLike, optional
+            The filepath of the image to load. If no image is supplied,
+            a file dialogue will be opened to choose the image file.
         """
         if filepath is None:
             filepath, dummy = QFileDialog.getOpenFileName(self, "Open image file.")
@@ -319,7 +330,11 @@ class QtImageViewer(QGraphicsView):
             self.setImage(image)
 
     def updateViewer(self):
-        """Show current zoom (if showing entire image, apply current aspect ratio mode)."""
+        """
+        Show the current zoom.
+
+        If the entire image is visible, apply current aspect ratio mode.
+        """
         if not self.hasImage():
             return
         if len(self.zoomStack):
@@ -330,17 +345,30 @@ class QtImageViewer(QGraphicsView):
             self.fitInView(self.sceneRect(), self.aspectRatioMode)  # Show entire image.
 
     def clearZoom(self):
+        """
+        Clear the zoom status of the scene.
+        """
         if len(self.zoomStack) > 0:
             self.zoomStack = []
             self.updateViewer()
             self.viewChanged.emit()
 
     def resizeEvent(self, event):
-        """Maintain current zoom on resize."""
+        """
+        Maintain the current zoom on resize.
+        """
         self.updateViewer()
 
     def mousePressEvent(self, event):
-        """Start mouse pan or zoom mode."""
+        """
+        Start either the mouse pan or zoom mode.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QMouseEvent`
+            The event that triggered this, i.e. a mouse press.
+        """
+
         # Ignore dummy events. e.g., Faking pan with left button ScrollHandDrag.
         dummyModifiers = Qt.KeyboardModifier(
             Qt.KeyboardModifier.ShiftModifier
@@ -432,7 +460,15 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.mousePressEvent(self, event)
 
     def mouseReleaseEvent(self, event):
-        """Stop mouse pan or zoom mode (apply zoom if valid)."""
+        """
+        Stop mouse pan or zoom mode, and apply zoom if valid.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QMouseEvent`
+            The event that triggered this, i.e. a mouse release.
+        """
+
         # Ignore dummy events. e.g., Faking pan with left button ScrollHandDrag.
         dummyModifiers = Qt.KeyboardModifier(
             Qt.KeyboardModifier.ShiftModifier
@@ -518,7 +554,14 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.mouseReleaseEvent(self, event)
 
     def mouseDoubleClickEvent(self, event):
-        """Show entire image."""
+        """
+        Reset the zoom to show the entire image.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QMouseEvent`
+            The event that triggered this, i.e. a double click.
+        """
         # Zoom out on double click?
         if (self.zoomOutButton is not None) and (event.button() == self.zoomOutButton):
             self.clearZoom()
@@ -534,6 +577,17 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.mouseDoubleClickEvent(self, event)
 
     def wheelEvent(self, event):
+        """
+        Handle all mouse wheel scroll events.
+
+        If the shift key is pressed, zoom into/out of the image; else
+        scroll around the image in the current zoom state.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QWheelEvent`
+            The event that triggered this, i.e. a mouse wheel scroll.
+        """
         if (
             self.wheelZoomFactor is not None
             and event.modifiers() & Qt.KeyboardModifier.ShiftModifier
@@ -608,6 +662,16 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.wheelEvent(self, event)
 
     def mouseMoveEvent(self, event):
+        """
+        Handle all mouse movement in the scene.
+
+        Emit the mouse position, and change the view if panning.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QMouseEvent`
+            The mouse move event.
+        """
         # Emit updated view during panning.
         if self._isPanning:
             QGraphicsView.mouseMoveEvent(self, event)
@@ -638,28 +702,71 @@ class QtImageViewer(QGraphicsView):
         QGraphicsView.mouseMoveEvent(self, event)
 
     def enterEvent(self, event):
+        """
+        Change the cursor shape when the mouse enters the scene.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtGui.QEnterEvent`
+            The triggering event.
+        """
         self.setCursor(Qt.CursorShape.CrossCursor)
 
     def leaveEvent(self, event):
+        """
+        Change the cursor shape when the mouse leaves the scene.
+
+        Parameters
+        ----------
+        event : `PyQt6.QtCore.QEvent`
+            The triggering event.
+        """
         self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def addROIs(self, rois):
+        """
+        Add ROIs to the scene.
+
+        Parameters
+        ----------
+        rois : `PyQt6.QtWidgets.QtGraphicsItem`
+            The regions of interest to add to the scene.
+        """
         for roi in rois:
             self.scene.addItem(roi)
             self.ROIs.append(roi)
 
     def deleteROIs(self, rois):
+        """
+        Remove ROIs from the scene.
+
+        Parameters
+        ----------
+        rois : `PyQt6.QtWidgets.QtGraphicsItem`
+            The regions of interest to remove from the scene.
+        """
         for roi in rois:
             self.scene.removeItem(roi)
             self.ROIs.remove(roi)
             del roi
 
     def clearROIs(self):
+        """
+        Remove all ROIs from the scene.
+        """
         for roi in self.ROIs:
             self.scene.removeItem(roi)
         del self.ROIs[:]
 
     def roiClicked(self, roi):
+        """
+        Emit a signal when a ROI is clicked.
+
+        Parameters
+        ----------
+        roi : `PyQt6.QtWidgets.QtGraphicsItem`
+            The selected ROI.
+        """
         for i in range(len(self.ROIs)):
             if roi is self.ROIs[i]:
                 self.roiSelected.emit(i)
@@ -667,6 +774,14 @@ class QtImageViewer(QGraphicsView):
                 break
 
     def setROIsAreMovable(self, tf):
+        """
+        Set movable ROIs.
+
+        Parameters
+        ----------
+        tf : bool
+            If the ROIs are movable.
+        """
         if tf:
             for roi in self.ROIs:
                 roi.setFlags(roi.flags() | QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
@@ -677,6 +792,16 @@ class QtImageViewer(QGraphicsView):
                 )
 
     def addSpots(self, xy, radius):
+        """
+        Add circular ROIs at the given coordinates.
+
+        Parameters
+        ----------
+        xy : array-like
+            A set of coordinates.
+        radius : float
+            The radius of the ROI.
+        """
         for xy_ in xy:
             x, y = xy_
             spot = EllipseROI(self)
@@ -743,41 +868,6 @@ class PolygonROI(QGraphicsPolygonItem):
         QGraphicsItem.mousePressEvent(self, event)
         if event.button() == Qt.MouseButton.LeftButton:
             self._viewer.roiClicked(self)
-
-
-if __name__ == "__main__":
-    import sys
-
-    try:
-        from PyQt6.QtWidgets import QApplication
-    except ImportError:
-        from PyQt5.QtWidgets import QApplication
-
-    def handleLeftClick(x, y):
-        row = int(y)
-        column = int(x)
-        print(
-            "Clicked on image pixel (row=" + str(row) + ", column=" + str(column) + ")"
-        )
-
-    def handleViewChange():
-        print("viewChanged")
-
-    # Create the application.
-    app = QApplication(sys.argv)
-
-    # Create image viewer.
-    viewer = QtImageViewer()
-
-    # Open an image from file.
-    viewer.open()
-
-    # Handle left mouse clicks with custom slot.
-    viewer.leftMouseButtonReleased.connect(handleLeftClick)
-
-    # Show viewer and run application.
-    viewer.show()
-    sys.exit(app.exec())
 
 
 class WorkerSignals(QObject):

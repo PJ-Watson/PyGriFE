@@ -76,4 +76,4 @@ override_SS05 = [  # override SS05 to allow docstrings starting with these words
 ]
 
 [tool.setuptools_scm]
-version_file = "pygrife/_version.py"
+version_file = "src/pygrife/_version.py"

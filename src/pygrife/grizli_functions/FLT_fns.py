@@ -12,7 +12,7 @@ from grizli.model import GrismDisperser
 
 def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True):
     """
-    Initialize a BeamCutout object from data objects.
+    Initialize a `grizli.model.BeamCutout` object from data objects.
 
     The original function was taken from
     `~grizli.model.BeamCutout.init_from_input`, and has been modified to
@@ -21,13 +21,13 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
 
     Parameters
     ----------
-    flt : `GrismFLT`
+    flt : `grizli.model.GrismFLT`
         Parent FLT frame.
 
-    beam : `GrismDisperser`
+    beam : `grizli.model.GrismDisperser`
         Object and spectral order to consider.
 
-    conf : `.grismconf.aXeConf`
+    conf : `grizli.grismconf.aXeConf`
         Pre-computed configuration file. If not specified will regenerate
         based on header parameters, which might be necessary for
         multiprocessing parallelization and pickling.
@@ -152,14 +152,15 @@ def get_beams_with_spectrum(
 
     The original function was taken from
     `~grizli.multifit.GroupFLT.get_beams`, and has been modified by:
+
         - Allowing a 1D spectrum to be passed through to ``beam.model``.
         - Identifying the overlapping object IDs in the previous
-        contamination model and segmentation map (if it exists), and
-        passing them through to `~grizli.model.BeamCutout`.
+          contamination model and segmentation map (if it exists), and
+          passing them through to `~grizli.model.BeamCutout`.
 
     Parameters
     ----------
-    grp : `~grizli.multifit.GroupFLT`
+    grp : `grizli.multifit.GroupFLT`
         The container for multiple grism exposures.
 
     id : int
@@ -169,10 +170,10 @@ def get_beams_with_spectrum(
         Half-size of the 2D spectrum to extract, along cross-dispersion
         axis.
 
-    center_rd : optional, (float, float)
+    center_rd : (float, float), optional
         Extract based on RA/Dec rather than catalog ID.
 
-    beam_id : type
+    beam_id : str
         Name of the order to extract.
 
     min_overlap : float
@@ -180,7 +181,7 @@ def get_beams_with_spectrum(
         or more valid pixels.
 
     min_valid_pix : int
-        Minimum number of valid pixels (`beam.fit_mask == True`) in 2D
+        Minimum number of valid pixels (``beam.fit_mask == True``) in 2D
         spectrum.
 
     min_mask : float
@@ -204,12 +205,12 @@ def get_beams_with_spectrum(
     spectrum_1d : [wavelengths, flux], optional
         The flux spectrum and corresponding wavelengths of the object
         in the model. By default, this is calculated automatically
-        from the stored `object_dispersers`.
+        from the stored ``object_dispersers``.
 
     is_cgs : bool, optional
-        The flux units of `spectrum_1d[1]` are cgs f_lambda flux
+        The flux units of ``spectrum_1d[1]`` are cgs f_lambda flux
         densities, rather than normalised in the detection band, by
-        default False.
+        default ``False``.
 
     Returns
     -------
@@ -288,7 +289,7 @@ def load_and_mod_FLT(
     """
     Helper function for loading `~grizli.model.GrismFLT` objects.
 
-    Originally taken from `~grizli.multifit._loadFLT`, modified to allow
+    Originally taken from `grizli.multifit._loadFLT`, modified to allow
     for storing an original segmentation map, used for the contamination
     model, and an updated segmentation map, used for current object
     extraction. Docstring compiled by PJW for consistency.
@@ -299,16 +300,16 @@ def load_and_mod_FLT(
         The processed grism file, typically in the form
         ``"*GrismFLT.fits"``.
     sci_extn : int
-        Science extension to extract from `grism_file`. For WFC3/IR this
+        Science extension to extract from ``grism_file``. For WFC3/IR this
         can only be 1, though for the two-chip instruments WFC3/UVIS and
         ACS/WFC3 this can be 1 or 2.
     direct_file : str
         A direct exposure, corresponding to the grism exposure. If this is
-        empty, `ref_file` will be used instead.
+        empty, ``ref_file`` will be used instead.
     pad : int or tuple[int, int]
         The padding in pixels, allowing modelling of sources outside
         the detector field of view. If a tuple is supplied, this is
-        taken as (pady, padx).
+        taken as ``(pady, padx)``.
     ref_file : str or None
         Undistorted reference image filename, e.g., a drizzled mosaic
         covering the area around a given grism exposure.
@@ -318,22 +319,22 @@ def load_and_mod_FLT(
         Segmentation image filename. If this is supplied, and it does not
         match the saved segmentation image, the returned
         `~grizli.model.GrismFLT` object will have two additional
-        attributes, `orig_seg_file`, and `orig_seg`.
+        attributes, ``orig_seg_file``, and ``orig_seg``.
     verbose : bool
         Print verbose information.
     catalog : str
-        Catalog filename assocated with `seg_file`.  These are typically
+        Catalog filename assocated with ``seg_file``.  These are typically
         generated with "SExtractor", but the source of the files
         themselves isn't critical.
     ix : int
         The index of the returned `~grizli.model.GrismFLT` object in the
-        parent `~grizli.model.GroupFLT` object.
+        parent `~grizli.multifit.GroupFLT` object.
     use_jwst_crds : bool
         Use CRDS ``specwcs`` reference files for JWST instruments.
 
     Returns
     -------
-    `~grizli.model.GrismFLT`
+    `grizli.model.GrismFLT`
         The instantiated grism object, with all attributes loaded.
     """
 
@@ -423,10 +424,8 @@ def mod_transform_JWST_WFSS(self, verbose=True):
 
     This function was modified from
     `~grizli.model.GrismFLT.transform_JWST_WFSS`, so that any stored
-    original segmentation map (`self.orig_seg`) would also be rotated.
+    original segmentation map (``self.orig_seg``) would also be rotated.
     Docstring compiled by PJW for consistency.
-
-    # ToDo - do this correctly for the SIP WCS / CRPIX keywords.
 
     Parameters
     ----------
@@ -436,7 +435,7 @@ def mod_transform_JWST_WFSS(self, verbose=True):
     Returns
     -------
     bool
-        Returns `True` if the transformation completed.
+        Returns ``True`` if the transformation completed.
     """
 
     if self.grism.instrument not in ["NIRCAM", "NIRISS"]:
@@ -568,6 +567,7 @@ def mod_compute_model_orders(
 
     size : int
         Radius of the cutout to extract.  The cutout is equivalent to::
+
             xc, yc = int(x), int(y)
             thumb = self.direct.data['SCI'][yc-size:yc+size, xc-size:xc+size]
 
@@ -582,6 +582,7 @@ def mod_compute_model_orders(
         Template 1D spectrum to convolve with the grism disperser.  If
         None, assumes trivial spectrum flat in f_lambda flux densities.
         Otherwise, the template is taken to be::
+
             wavelength, flux = spectrum_1d
 
     is_cgs : bool
@@ -591,33 +592,33 @@ def mod_compute_model_orders(
     compute_size : bool
         Ignore `x`, `y`, and `size` and compute the extent of the
         segmentation polygon directly using
-        `utils_c.disperse.compute_segmentation_limits`.
+        `~grizli.utils_c.disperse.compute_segmentation_limits`.
 
     max_size : int or None
-        Enforce a maximum size of the cutout when using `compute_size`.
+        Enforce a maximum size of the cutout when using ``compute_size``.
 
     min_size : int or None
-        Enforce a minimum size of the cutout when using `compute_size`.
+        Enforce a minimum size of the cutout when using ``compute_size``.
 
     store : bool
-        If True, then store the computed beams in the OrderedDict
-        `self.object_dispersers[id]`.
+        If True, then store the computed beams in the
+        `~grizli.grismconf.OrderedDict` ``self.object_dispersers[id]``.
 
         If many objects are computed, this can be memory intensive. To
-        save memory, set to False and then the function just stores the
-        input template spectrum (`spectrum_1d`) and the beams will have
-        to be recomputed if necessary.
+        save memory, set to ``False`` and then the function just stores
+        the input template spectrum (``spectrum_1d``) and the beams will
+        have to be recomputed if necessary.
 
     in_place : bool
-        If True, add the computed spectral orders into `self.model`.
+        If ``True``, add the computed spectral orders into ``self.model``.
         Otherwise, make a clean array with only the orders of the given
         object.
 
     get_beams : list or None
         Spectral orders to retrieve with names as defined in the
-        configuration files, e.g., ['A'] generally for the +1st order of
-        HST grisms.  If `None`, then get all orders listed in the
-        `beams` attribute of the `~grizli.grismconf.aXeConf`
+        configuration files, e.g., ``['A']`` generally for the +1st order
+        of HST grisms.  If ``None``, then get all orders listed in the
+        ``beams`` attribute of the `~grizli.grismconf.aXeConf`
         configuration object.
 
     psf_params : list
@@ -630,15 +631,15 @@ def mod_compute_model_orders(
     Returns
     -------
     bool or `numpy.array`
-        If `in_place` is True, return status of True if everything goes
-        OK. The computed spectral orders are stored in place in
-        `self.model`.
+        If ``in_place`` is ``True``, return status of ``True`` if
+        everything goes OK. The computed spectral orders are stored in
+        place in ``self.model``.
 
-        Returns False if the specified `id` is not found in the
-        segmentation array independent of `in_place`.
+        Returns ``False`` if the specified ``id`` is not found in the
+        segmentation array independent of ``in_place``.
 
-        If `in_place` is False, return a full array including the model
-        for the single object.
+        If ``in_place`` is ``False``, return a full array including the
+        model for the single object.
     """
     from grizli.utils_c import disperse
 

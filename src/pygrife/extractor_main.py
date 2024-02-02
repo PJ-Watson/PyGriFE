@@ -103,7 +103,7 @@ class GrismExtractor:
     This class enables the extraction of objects from arbitrary regions
     of existing slitless spectroscopic exposures. This allows the
     modification of both catalogues and contamination maps previously
-    derived using `~grizli`.
+    derived using `grizli`.
 
     Parameters
     ----------
@@ -116,31 +116,31 @@ class GrismExtractor:
         ``'Prep/'``.
     out_dir : str or os.PathLike
         The output directory, where all the modified files will be
-        saved. Any relevant files are copied from `in_dir` to
-        `out_dir`, if they do not already exist.
+        saved. Any relevant files are copied from ``in_dir`` to
+        ``out_dir``, if they do not already exist.
     seg_path : str or os.PathLike, optional
         The path pointing to the original segmentation map. If not
         supplied, this will have to be loaded later.
 
     Attributes
     ----------
-    catalogue : `~astropy.table.Table`
-        The multiband catalogue used by grizli.
+    catalogue : `astropy.table.Table`
+        The multiband catalogue used by `grizli`.
     field_root : str
         The root name of the catalogue and processed images.
-    grp : `~grizli.multifit.GroupFLT`
+    grp : `grizli.multifit.GroupFLT`
         The container for multiple grism exposures.
     in_dir : os.PathLike
         The input directory.
     out_dir : os.PathLike
         The output directory, where all the modified files are saved.
-    seg_hdr : `~astropy.io.fits.Header`
+    seg_hdr : `astropy.io.fits.Header`
         The header of the current segmentation map.
     seg_map : array-like
         The current segmentation map.
     seg_name : str
         The name of the current segmentation map.
-    seg_wcs : `~astropy.wcs.WCS`
+    seg_wcs : `astropy.wcs.WCS`
         The WCS of the current segmentation map.
     """
 
@@ -229,7 +229,7 @@ class GrismExtractor:
         ----------
         **kwargs : dict, optional
             Keyword arguments are passed through to
-            `~grizli_functions.catalogue_fns.regen_multiband_catalogue()`.
+            `~pygrife.grizli_functions.catalogue_fns.regen_multiband_catalogue`.
 
         Returns
         -------
@@ -289,7 +289,7 @@ class GrismExtractor:
         """
         Load an existing set of grism files into memory.
 
-        Load (or reload) a set of `*GrismFLT` files into memory, keeping
+        Load (or reload) a set of ``"*GrismFLT"`` files into memory, keeping
         track of the current segmentation map, and the map used to
         generate the contamination model.
 
@@ -297,25 +297,25 @@ class GrismExtractor:
         ----------
         grism_files : array-like, optional
             An explicit list of the grism files to use. By default, all
-            `*GrismFLT.fits' files in the output directory will be used.
+            ``"*GrismFLT.fits"`` files in the output directory will be used.
         detection_filter : str, optional
             The filter image used for the source detection, by default
-            ``ir``. This is used to locate the catalogue.
+            ``"ir"``. This is used to locate the catalogue.
         pad : int or tuple[int, int], optional
             The padding in pixels, allowing modelling of sources outside
             the detector field of view. If a tuple is supplied, this is
-            taken as (pady, padx). Defaults to 800pix in both axes.
+            taken as ``(pady, padx)``. Defaults to 800pix in both axes.
         cpu_count : int, optional
-            If < 0, load files serially. If > 0, load files in `cpu_count`
+            If < 0, load files serially. If > 0, load files in ``cpu_count``
             parallel processes. Use all available cores if
-            `cpu_count` = 0. Defaults to 4 processes.
+            ``cpu_count=0``. Defaults to 4 processes.
         **kwargs : dict, optional
             Any other keyword arguments, passed through to
-            `grizli.multifit.GroupFLT()`.
+            `~grizli.multifit.GroupFLT()`.
 
         Returns
         -------
-        `~grizli.multifit.GroupFLT`
+        ~grizli.multifit.GroupFLT
             The container for multiple grism exposures.
 
         Notes
@@ -393,15 +393,15 @@ class GrismExtractor:
             0 < z < 0.5.
         beams_kwargs : dict, optional
             Keyword arguments to pass to
-            `~grizli.multifit.GroupFLT.get_beams()`.
+            `~grizli.multifit.GroupFLT.get_beams`.
         multibeam_kwargs : dict, optional
-            Keyword arguments to pass to `~grizli.multifit.MultiBeam()`.
-        spectrum_1d : [wavelengths, flux], optional
+            Keyword arguments to pass to `~grizli.multifit.MultiBeam`.
+        spectrum_1d : [``wavelengths``, ``flux``], optional
             The flux spectrum and corresponding wavelengths of the object
             in the model. By default, this is calculated automatically
-            from the stored `object_dispersers`.
+            from the stored ``object_dispersers``.
         is_cgs : bool, optional
-            The flux units of `spectrum_1d[1]` are cgs f_lambda flux
+            The flux units of ``spectrum_1d[1]`` are cgs f_lambda flux
             densities, rather than normalised in the detection band, by
             default True.
         """
@@ -494,15 +494,15 @@ class GrismExtractor:
         Parameters
         ----------
         spectrum : str, optional
-            The component of the best-fit spectrum to use, either `full'
-            or `continuum'.
+            The component of the best-fit spectrum to use, either
+            ``"full"`` or ``"continuum"``.
         max_chinu : int or float, optional
             The maximum reduced chi-squared value of the fit to accept,
             in order to refine the contamination model with the resulting
             spectrum, by default 5.
         fit_files : list[str] or list[os.PathLike] or None, optional
             An explicit list of the best-fit files to use. By default, all
-            `*full.fits' files in the current directory will be used.
+            ``*full.fits`` files in the current directory will be used.
 
         Returns
         -------
@@ -580,8 +580,8 @@ class GrismExtractor:
         Returns
         -------
         ndarray, bool
-            The mask, where elements are True if the distance to
-            (x_c, y_c) is less than or equal to radius.
+            The mask, where elements are ``True`` if the distance to
+            ``(x_c, y_c)`` is less than or equal to ``radius``.
         """
 
         Y, X = np.ogrid[: self.seg_map.shape[0], : self.seg_map.shape[1]]
@@ -602,21 +602,21 @@ class GrismExtractor:
         Process the coordinate and radii input.
 
         The outputs are formatted to work with
-        `~GrizliExtractor.add_circ_obj()` and
-        `~GrizliExtractor.add_segment_obj()`, and include only values
+        `~GrismExtractor.add_circ_obj()` and
+        `~GrismExtractor.add_segment_obj()`, and include only values
         inside the segmentation map footprint.
 
         Parameters
         ----------
-        outer_radius : `~astropy.units.Quantity` or array-like
+        outer_radius : `astropy.units.Quantity` or array-like
             The outer radius of the aperture.
-        inner_radius : `~astropy.units.Quantity` or array-like
+        inner_radius : `astropy.units.Quantity` or array-like
             If non-zero, an annulus will be extracted instead of
             an aperture.
-        centre : `~astropy.coordinates.SkyCoord`
+        centre : `astropy.coordinates.SkyCoord`
             The centre of the aperture.
         **kwargs : dict, optional
-            Any inputs accepted by astropy.coordinates.SkyCoord, if
+            Any inputs accepted by `~astropy.coordinates.SkyCoord`, if
             `centre` is None.
 
         Returns
@@ -704,20 +704,20 @@ class GrismExtractor:
 
         Parameters
         ----------
-        radius : `~astropy.units.Quantity` or array-like, optional
+        radius : `astropy.units.Quantity` or array-like, optional
             The outer radius of the aperture, by default 3 arcseconds.
-        inner_radius : `~astropy.units.Quantity` or array-like, optional
+        inner_radius : `astropy.units.Quantity` or array-like, optional
             If specified, an annulus will be extracted instead of
             an aperture.
-        centre : `~astropy.coordinates.SkyCoord`, optional
+        centre : `astropy.coordinates.SkyCoord`, optional
             The centre of the aperture.
         init_id : int, optional
             The ID to assign to the object. If multiple coordinates are
-            given, the ID will increase in integer steps from `init_id`.
-            By default, `init_id` will start at `max(seg_map)+1`.
+            given, the ID will increase in integer steps from ``init_id``.
+            By default, ``init_id`` will start at ``max(seg_map)+1``.
         **kwargs : dict, optional
-            Any inputs accepted by astropy.coordinates.SkyCoord, if
-            `centre` is None.
+            Any inputs accepted by `~astropy.coordinates.SkyCoord`, if
+            ``centre`` is None.
 
         Returns
         -------
@@ -772,25 +772,25 @@ class GrismExtractor:
 
         Parameters
         ----------
-        radius : `~astropy.units.Quantity` or array-like, optional
+        radius : `astropy.units.Quantity` or array-like, optional
             The outer radius of the aperture, by default 3 arcseconds.
         inner_radius : `~astropy.units.Quantity` or array-like, optional
             If specified, an annulus will be extracted instead of
             an aperture.
-        centre : `~astropy.coordinates.SkyCoord`, optional
+        centre : `astropy.coordinates.SkyCoord`, optional
             The centre of the aperture.
         segments : int, optional
             The number of sectors into which each object will be divided,
             by default 4.
-        angle : `~astropy.units.Quantity` or float, optional
+        angle : `astropy.units.Quantity` or float, optional
             The position angle offset, by default 0.
         init_id : int, optional
             The ID to assign to the object. If multiple coordinates are
-            given, the ID will increase in integer steps from `init_id`.
-            By default, `init_id` will start at `max(seg_map)+1`.
+            given, the ID will increase in integer steps from ``init_id``.
+            By default, ``init_id`` will start at ``max(seg_map)+1``.
         **kwargs : dict, optional
-            Any inputs accepted by astropy.coordinates.SkyCoord, if
-            `centre` is None.
+            Any inputs accepted by `~astropy.coordinates.SkyCoord`, if
+            ``centre`` is ``None``.
 
         Returns
         -------
@@ -862,13 +862,13 @@ class GrismExtractor:
         format : str or None, optional
             The file format specifier. If None, the format is
             automatically inferred from the file extension.
-        reg_wcs : `~astropy.wcs.WCS` or None, optional
+        reg_wcs : `astropy.wcs.WCS` or None, optional
             The WCS to use to convert pixels to world coordinates.
             By default, the segmentation map WCS will be used.
         init_id : int, optional
             The ID to assign to the object. If multiple coordinates are
-            given, the ID will increase in integer steps from `init_id`.
-            By default, `init_id` will start at `max(seg_map)+1`.
+            given, the ID will increase in integer steps from ``init_id``.
+            By default, ``init_id`` will start at ``max(seg_map)+1``.
 
         Returns
         -------

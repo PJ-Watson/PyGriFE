@@ -5,6 +5,7 @@ from pathlib import Path
 
 import astropy.io.fits as pf
 import numpy as np
+import PyQt6
 import qimage2ndarray
 from astropy import wcs
 from astropy.visualization import (
@@ -39,6 +40,18 @@ from .qt_utils import QtImageViewer, Worker, WorkerSignals
 
 
 class SegMapViewer(QMainWindow):
+    """
+    A Qt-based viewer for segmentation maps.
+
+    This composites together an RGB image from three separate images, and
+    overlays a segmentation map on top, which can be modified through the supplied tools.
+
+    Parameters
+    ----------
+    QMainWindow : _type_
+        _description_
+    """
+
     def __init__(
         self,
         field_root: str = "nis-wfss",
@@ -627,11 +640,6 @@ class Separator(QFrame):
         self.setLineWidth(3)
 
 
-class PopUpWindow(QWidget):
-    def __init__(self):
-        QWidget.__init__(self)
-
-
 class LineBrowse(QWidget):
     clicked = pyqtSignal()
 
@@ -776,10 +784,3 @@ class FilesWindow(QWidget):
 
     def printText(self):
         print("This works")
-
-
-# if __name__=="__main__":
-#     app = QApplication(sys.argv)
-#     window = SegMapViewer()
-#     window.showMaximized()
-#     app.exec()

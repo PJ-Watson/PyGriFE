@@ -162,3 +162,4 @@ cython_debug/
 test_script.py
 *.prof
 *.code-workspace
+*_version.py
