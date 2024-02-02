@@ -1,6 +1,7 @@
 # PyGriFE
+[![Documentation Status](https://readthedocs.org/projects/pygrife/badge/?version=latest)](https://pygrife.readthedocs.io/en/latest/?badge=latest)
 
-A package to aid in the forced extraction of pre-processed grism data.
+A package to aid in the forced extraction of pre-processed grism data. The full documentation can be found at [https://pygrife.readthedocs.io](https://pygrife.readthedocs.io), with a brief summary below.
 
 ## Installation
 
