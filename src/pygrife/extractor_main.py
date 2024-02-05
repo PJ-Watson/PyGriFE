@@ -22,7 +22,10 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import sep
+try:
+    import sep_pjw as sep
+except:
+    import sep
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
 from tqdm import tqdm

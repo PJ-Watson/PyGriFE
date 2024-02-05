@@ -31,7 +31,7 @@ grizli = [
     "dust_attenuation @ git+https://github.com/gbrammer/dust_attenuation"
 ]
 sep = [
-    "sep @ git+https://github.com/PJ-Watson/sep"
+    "sep-pjw @ git+https://github.com/PJ-Watson/sep-pjw"
 ]
 GUI = [
     "pyqt6>=6.6.0",
