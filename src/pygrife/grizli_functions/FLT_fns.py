@@ -41,6 +41,7 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
     if conf is None:
         conf = grismconf.load_grism_config(flt.conf_file)
 
+    print (f"Reached here, key={self.id}")
     self.beam = model.GrismDisperser(
         id=beam.id,
         direct=beam.direct * 1,
@@ -72,6 +73,7 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
         hasattr(beam, "old_obj_ids")
         and len(np.atleast_1d(beam.old_obj_ids).flatten()) > 0
     ):
+        print (beam.old_obj_ids)
         seg_copy = deepcopy(beam.seg)
         beam.seg = deepcopy(flt.orig_seg[sly_thumb, slx_thumb])
         beam.seg[seg_copy != self.id] = 0
@@ -80,8 +82,12 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
         self.modelf = np.zeros_like(self.beam.modelf)
 
         for o in beam.old_obj_ids:
-            spec = flt.object_dispersers[o][1]
-            cgs = flt.object_dispersers[o][0]
+            try:
+                spec = flt.object_dispersers[o][1]
+                cgs = flt.object_dispersers[o][0]
+            except:
+                print (f"{o} not in object dispersers")
+                continue
 
             if cgs:
                 scale = np.nansum(beam.direct[beam.seg == o]) / np.nansum(
@@ -113,6 +119,11 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
         self.beam.model = self.model
         self.beam.modelf = self.modelf
 
+
+        # import matplotlib.pyplot as plt
+        # plt.imshow(self.beam.model)
+        # plt.show()
+
     elif beam.spectrum_1d is None:
         self.compute_model()
     else:
@@ -128,7 +139,25 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
     )
 
     self.contam = flt.model[self.beam.sly_parent, self.beam.slx_parent] * 1
+
+
+    # import matplotlib.pyplot as plt
+    # fig, axs = plt.subplots(3,1, sharex=True, sharey=True)
+    # axs[0].imshow(np.log(self.contam), cmap="plasma", origin="lower")
+
     self.contam -= self.beam.model
+
+    # axs[1].imshow(np.log(self.contam), cmap="plasma", origin="lower")
+    # # plt.show()
+
+    # # print (self.grism.data)
+    # # print (dir(self.grism.data))
+
+    # # import matplotlib.pyplot as plt
+    # axs[2].imshow(np.log(self.grism.data["SCI"]-self.contam), cmap="plasma", origin="lower")
+    # plt.show()
+
+
 
 
 def get_beams_with_spectrum(
@@ -643,6 +672,8 @@ def mod_compute_model_orders(
     """
     from grizli.utils_c import disperse
 
+    old_spectrum_1d = None
+    old_cgs = None
     if id in self.object_dispersers:
         object_in_model = True
         beams = self.object_dispersers[id]
@@ -680,6 +711,7 @@ def mod_compute_model_orders(
         xcat = ycat = None
         if self.catalog is not None:
             ix = self.catalog["id"] == id
+            print (len(self.catalog))
             if ix.sum() == 0:
                 if verbose:
                     print(f"ID {id} not found in segmentation image")
@@ -844,6 +876,7 @@ def mod_compute_model_orders(
 
     # Compute old model
     if hasattr(self, "orig_seg"):
+        print ("Contains old segmentation map.")
         for b in beams:
             beam = beams[b]
 
@@ -859,47 +892,56 @@ def mod_compute_model_orders(
             seg_ids_copy = deepcopy(beam.seg_ids)
             beam.seg_ids = old_obj_ids
 
+            print (f"old_obj_ids: {old_obj_ids}")
+
             new_modelf = np.zeros_like(beam.modelf)
             for i, o in enumerate(old_obj_ids):
-                if o == id:
-                    spec = old_spectrum_1d
-                    cgs = old_cgs
-                else:
-                    spec = self.object_dispersers[o][1]
-                    cgs = self.object_dispersers[o][0]
+                try:
+                    if o == id:
+                        spec = old_spectrum_1d
+                        cgs = old_cgs
+                    else:
+                        spec = self.object_dispersers[o][1]
+                        cgs = self.object_dispersers[o][0]
 
-                if cgs:
-                    scale = np.nansum(beam.direct[beam.seg == o]) / np.nansum(
-                        self.direct.data["REF"][self.orig_seg == o]
-                    )
-                else:
-                    scale = 1.0
+                    if cgs:
+                        scale = np.nansum(beam.direct[beam.seg == o]) / np.nansum(
+                            self.direct.data["REF"][self.orig_seg == o]
+                        )
+                    else:
+                        scale = 1.0
 
-                if hasattr(beam, "psf") & (not INIT_PSF_NOW):
-                    store = True
-                    result = beam.compute_model_psf(
-                        id=o,
-                        in_place=False,
-                        spectrum_1d=spec,
-                        is_cgs=cgs,
-                        scale=scale,
-                    )
-                else:
-                    result = beam.compute_model(
-                        id=o,
-                        in_place=False,
-                        spectrum_1d=spec,
-                        is_cgs=cgs,
-                        scale=scale,
-                    )
+                    if hasattr(beam, "psf") & (not INIT_PSF_NOW):
+                        store = True
+                        result = beam.compute_model_psf(
+                            id=o,
+                            in_place=False,
+                            spectrum_1d=spec,
+                            is_cgs=cgs,
+                            scale=scale,
+                        )
+                    else:
+                        result = beam.compute_model(
+                            id=o,
+                            in_place=False,
+                            spectrum_1d=spec,
+                            is_cgs=cgs,
+                            scale=scale,
+                        )
 
-                new_modelf += result
+                    new_modelf += result
+                except Exception as e:
+                    print (f"Error in model computation: {e}")
 
             beam.modelf = new_modelf
             beam.model = new_modelf.reshape(beam.sh_beam)
             beam.seg = seg_copy
             beam.seg_ids = seg_ids_copy
             beam.id = id
+
+            # import matplotlib.pyplot as plt
+            # plt.imshow(beam.model)
+            # plt.show()
 
             object_in_model = True
 

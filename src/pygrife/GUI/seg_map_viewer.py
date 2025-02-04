@@ -413,7 +413,7 @@ class SegMapViewer(QMainWindow):
             if getattr(self, l) is None:
                 try:
                     filt_img = [
-                        *test_dir.glob(f"{self.field_root}-{f.lower()}_drz_sci.fits")
+                        *test_dir.glob(f"{self.field_root}-{f.lower()}_dr[zc]_sci.fits")
                     ][0]
                     setattr(self, l, filt_img)
                 except:

@@ -60,6 +60,9 @@ class ExtractorGUI(SegMapViewer):
             **kwargs,
         )
 
+        self.new_dir_name = new_dir_name
+        self.new_dir_path = new_dir_path
+
         self.layout_side.addWidget(Separator())
         self.extract_object_button = QPushButton("Extract Object", self)
         self.extract_object_button.clicked.connect(self.extraction_handler)

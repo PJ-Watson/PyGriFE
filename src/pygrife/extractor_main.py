@@ -1,7 +1,6 @@
 """Organise the forced extraction tool, and hook into grizli methods."""
 
 import glob
-import logging
 import math
 import multiprocessing
 import os
@@ -22,19 +21,18 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-try:
-    import sep_pjw as sep
-except:
-    import sep
 from astropy.coordinates import SkyCoord
 from astropy.wcs import WCS
+from astropy.table import Table
 from tqdm import tqdm
+import warnings
 
-if version("sep").split(".")[1] < "3":
-    raise ImportError("""
-        Modifying the object catalogue requires SEP>=1.3.0. Please install the fork
-        maintained at https://github.com/PJ-Watson/sep.
-    """)
+if version("sep-pjw").split(".")[1] < "3":
+    warnings.warn(
+        RuntimeWarning(
+        "Modifying the object catalogue requires SEP>=1.3.0. Please install the fork "
+        "maintained at https://github.com/PJ-Watson/sep-pjw."
+    ))
 
 # grizli_dir = Path(
 #     "/Path/to/out/dir" # Point this to the output directory
@@ -78,15 +76,14 @@ try:
     Path(os.getenv("iref")).is_dir()
     Path(os.getenv("jref")).is_dir()
 except:
-    raise RuntimeError("""
-        Either the grizli environment variables are not set correctly,
-        or the directories they point to do not yet exist.
-        Check that the environment is correctly configured
-        (https://grizli.readthedocs.io/en/latest/grizli/install.html),
-        or edit and uncomment the lines above.
-    """)
+    warnings.warn(RuntimeWarning(
+        "Either the grizli environment variables are not set correctly, "
+        "or the directories they point to do not yet exist. "
+        "Check that the environment is correctly configured "
+        "(https://grizli.readthedocs.io/en/latest/grizli/install.html), "
+        "or edit and uncomment the lines above."
+    ))
 
-import eazy
 import grizli
 from grizli import fitting, jwst_utils, model, multifit, prep, utils
 from grizli.pipeline import auto_script, photoz
@@ -97,7 +94,6 @@ multifit._loadFLT = FLT_fns.load_and_mod_FLT
 model.GrismFLT.transform_JWST_WFSS = FLT_fns.mod_transform_JWST_WFSS
 model.GrismFLT.compute_model_orders = FLT_fns.mod_compute_model_orders
 model.BeamCutout.init_from_input = FLT_fns.init_from_input_multispec
-
 
 class GrismExtractor:
     """
@@ -240,6 +236,12 @@ class GrismExtractor:
             The multiband catalogue.
         """
 
+        if version("sep-pjw").split(".")[1] < "3":
+            raise ImportError(
+                "Modifying the object catalogue requires SEP>=1.3.0. Please install the fork "
+                "maintained at https://github.com/PJ-Watson/sep-pjw."
+            )
+
         utils.log_comment(
             utils.LOGFILE,
             "Regenerating multiband catalogue...",
@@ -287,6 +289,8 @@ class GrismExtractor:
         detection_filter: str = "ir",
         pad: int | tuple[int, int] = 800,
         cpu_count: int = 4,
+        catalog_path: str | os.PathLike | None = None,
+        seg_path: str | os.PathLike | None = None,
         **kwargs,
     ) -> grizli.multifit.GroupFLT:
         """
@@ -312,6 +316,13 @@ class GrismExtractor:
             If < 0, load files serially. If > 0, load files in ``cpu_count``
             parallel processes. Use all available cores if
             ``cpu_count=0``. Defaults to 4 processes.
+        catalog_path : str or os.Pathlike, optional
+            The path of the catalogue to use when loading the grism files,
+            Defaults to ``"{self.field_root}-{detection_filter}.cat.fits"``.
+        seg_path : str or os.Pathlike, optional
+            The path of the segmentation map to use when loading the grism
+            files, if different to ``self.seg_map``.
+            Defaults to ``"{self.field_root}-{detection_filter}_seg.fits"``.
         **kwargs : dict, optional
             Any other keyword arguments, passed through to
             `~grizli.multifit.GroupFLT()`.
@@ -343,41 +354,98 @@ class GrismExtractor:
             show_date=True,
         )
 
-        catalog_path = Path(
-            kwargs.get(
-                "catalog_path",
-                self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits",
-            ),
-        )
+        if catalog_path is not None:
+            if kwargs.get("catalog") is not None:
+                raise Exception("Only one of `catalog` and `catalog_path` can be supplied.")
+            catalog_path = Path(catalog_path)
+        else:
+            catalog_path = Path(self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits")
         if not catalog_path.is_file():
             raise FileNotFoundError(
                 f"Catalogue file not found at the specified location: {catalog_path}."
             )
-        seg_path = kwargs.get("seg_path")
-        if seg_path is None and hasattr(self, "seg_name"):
-            seg_path = self.out_dir / self.seg_name
+
         if seg_path is not None:
-            if not Path(seg_path).is_file():
-                raise FileNotFoundError(
-                    f"Segmentation map not found at the specified location: {seg_path}."
-                )
-            seg_path = str(seg_path)
+            if kwargs.get("seg_file") is not None:
+                raise Exception("Only one of `seg_path` and `seg_file` can be supplied.")
+            seg_path = Path(seg_path)
+        elif hasattr(self, "seg_name"):
+            seg_path = self.out_dir / self.seg_name
+        else:
+            seg_path = Path(self.out_dir / f"{self.field_root}-{detection_filter}_seg.fits")
+        if not Path(seg_path).is_file():
+            raise FileNotFoundError(
+                f"Segmentation map not found at the specified location: {seg_path}."
+            )
 
         self.grp = multifit.GroupFLT(
             cpu_count=cpu_count,
             grism_files=grism_files,
             pad=pad,
-            seg_file=seg_path,
+            seg_file=str(seg_path),
             catalog=str(catalog_path),
             **kwargs,
         )
 
         return self.grp
 
+    def match_objects(
+        self,
+        targets: astropy.table.Table,
+        column_names: dict | None = None,
+        return_all: bool = False,
+    ) -> npt.NDArray | tuple[npt.NDArray, astropy.table.Table, astropy.table.Table]:
+
+        if not hasattr(self, "grp"):
+            raise Exception(
+                "GrismFLT files not loaded. Run `load_grism_files()' first."
+            )
+
+        if column_names is not None:
+            for k, v in column_names.items():
+                targets.rename_column(v, k)
+
+        targets.rename_columns(targets.colnames, [c.lower() for c in targets.colnames])
+        
+        print (targets)
+        idx, dr = self.grp.catalog.match_to_catalog_sky(targets)
+        indices = []
+        failed_indices = []
+        for i, n in enumerate(idx):
+            if dr[i].value > 1.0:
+                print(f"{targets['id'][i]} not matched: separation = {dr[i]:0.2f}")
+                failed_indices.append(i)
+                continue
+            else:
+                indices.append(i)
+
+        obj_ids = np.asarray(self.grp.catalog["NUMBER"][idx][indices])
+        failed_objs = targets[failed_indices]
+        if not return_all:
+            return obj_ids
+        else:
+            obj = Table()
+            obj["id"] = obj_ids
+            obj["ra"] = targets["ra"][indices]
+            obj["dec"] = targets["dec"][indices]
+            obj["idx"] = idx[indices]
+            obj["dr"] = dr[indices]  # .to(u.mas)
+            obj["dr"].format = "0.2f"
+            obj["name"] = targets["id"][indices]
+            for n in targets.colnames:
+                if n not in ["id", "ra", "dec"]:
+                    try:
+                        obj[n] = targets[n][indices]
+                    except:
+                        pass
+            return obj_ids, obj, failed_objs
+
+
     def extract_spectra(
         self,
         obj_id_list: npt.ArrayLike,
         z_range: npt.ArrayLike = [0.0, 0.5],
+        fit_kwargs: dict[str, Any] | None = None,
         beams_kwargs: dict[str, Any] | None = None,
         multibeam_kwargs: dict[str, Any] | None = None,
         spectrum_1d: npt.ArrayLike | None = None,
@@ -394,6 +462,9 @@ class GrismExtractor:
         z_range : array-like, optional
             The redshift range to consider for the extraction, by default
             0 < z < 0.5.
+        fit_kwargs : dict, optional
+            Keyword arguments to pass to
+            `~grizli.pipeline.auto_script.generate_fit_params`.
         beams_kwargs : dict, optional
             Keyword arguments to pass to
             `~grizli.multifit.GroupFLT.get_beams`.
@@ -413,7 +484,7 @@ class GrismExtractor:
             raise Exception(
                 "GrismFLT files not loaded. Run `load_grism_files()' first."
             )
-        if Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
+        if hasattr(self, "seg_name") and Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
             raise Exception(
                 f"The current segmentation map ({self.seg_name}) does not match the"
                 " name stored in the GrismFLT files"
@@ -429,21 +500,6 @@ class GrismExtractor:
             show_date=True,
         )
         os.chdir(self.out_dir)
-        pline = {
-            "kernel": "square",
-            "pixfrac": 1.0,
-            "pixscale": 0.03,
-            "size": 8,
-            "wcs": None,
-        }
-        args = auto_script.generate_fit_params(
-            pline=pline,
-            field_root=self.field_root,
-            min_sens=0.0,
-            min_mask=0.0,
-            # include_photometry=True,
-            # use_phot_obj=True,
-        )  # set both of these to True to include photometry in fitting
 
         if beams_kwargs is None:
             beams_kwargs = {}
@@ -457,6 +513,26 @@ class GrismExtractor:
         multibeam_kwargs["fcontam"] = multibeam_kwargs.get("fcontam", 0.1)
         multibeam_kwargs["min_mask"] = multibeam_kwargs.get("min_mask", 0.0)
         multibeam_kwargs["min_sens"] = multibeam_kwargs.get("min_sens", 0.0)
+
+        pline = {
+            "kernel": "square",
+            "pixfrac": 1.0,
+            "pixscale": 0.03,
+            "size": 8,
+            "wcs": None,
+        }
+        if fit_kwargs is None:
+            fit_kwargs = {}
+        fit_kwargs["pline"] = fit_kwargs.get("pline", pline)
+        fit_kwargs["field_root"] = fit_kwargs.get("field_root", self.field_root)
+        fit_kwargs["min_sens"] = fit_kwargs.get("min_sens", 0.0)
+        fit_kwargs["min_mask"] = fit_kwargs.get("min_mask", 0.0)
+
+        args = auto_script.generate_fit_params(
+            **fit_kwargs,
+            include_photometry=False,
+            use_phot_obj=False,
+        )  # set both of these to True to include photometry in fitting
 
         obj_id_arr = np.atleast_1d(obj_id_list).flatten()
 
@@ -926,9 +1002,9 @@ class GrismExtractor:
             init_id = np.nanmax(self.seg_map) + 1
         else:
             test_in = np.isin(init_id, self.seg_map)
-            if any(test_in):
+            if test_in:
                 warnings.warn(
-                    f"Object IDs {new_obj_ids[test_in]} exist already in the "
+                    f"Object IDs {init_id} exist already in the "
                     "segmentation map, and will be merged with the new object(s)."
                 )
 
