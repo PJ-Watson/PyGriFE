@@ -41,7 +41,7 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
     if conf is None:
         conf = grismconf.load_grism_config(flt.conf_file)
 
-    print (f"Reached here, key={self.id}")
+    print(f"Reached here, key={self.id}")
     self.beam = model.GrismDisperser(
         id=beam.id,
         direct=beam.direct * 1,
@@ -73,7 +73,7 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
         hasattr(beam, "old_obj_ids")
         and len(np.atleast_1d(beam.old_obj_ids).flatten()) > 0
     ):
-        print (beam.old_obj_ids)
+        print(beam.old_obj_ids)
         seg_copy = deepcopy(beam.seg)
         beam.seg = deepcopy(flt.orig_seg[sly_thumb, slx_thumb])
         beam.seg[seg_copy != self.id] = 0
@@ -86,7 +86,7 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
                 spec = flt.object_dispersers[o][1]
                 cgs = flt.object_dispersers[o][0]
             except:
-                print (f"{o} not in object dispersers")
+                print(f"{o} not in object dispersers")
                 continue
 
             if cgs:
@@ -119,7 +119,6 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
         self.beam.model = self.model
         self.beam.modelf = self.modelf
 
-
         # import matplotlib.pyplot as plt
         # plt.imshow(self.beam.model)
         # plt.show()
@@ -140,7 +139,6 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
 
     self.contam = flt.model[self.beam.sly_parent, self.beam.slx_parent] * 1
 
-
     # import matplotlib.pyplot as plt
     # fig, axs = plt.subplots(3,1, sharex=True, sharey=True)
     # axs[0].imshow(np.log(self.contam), cmap="plasma", origin="lower")
@@ -156,8 +154,6 @@ def init_from_input_multispec(self, flt, beam, conf=None, get_slice_header=True)
     # # import matplotlib.pyplot as plt
     # axs[2].imshow(np.log(self.grism.data["SCI"]-self.contam), cmap="plasma", origin="lower")
     # plt.show()
-
-
 
 
 def get_beams_with_spectrum(
@@ -711,7 +707,7 @@ def mod_compute_model_orders(
         xcat = ycat = None
         if self.catalog is not None:
             ix = self.catalog["id"] == id
-            print (len(self.catalog))
+            print(len(self.catalog))
             if ix.sum() == 0:
                 if verbose:
                     print(f"ID {id} not found in segmentation image")
@@ -876,7 +872,7 @@ def mod_compute_model_orders(
 
     # Compute old model
     if hasattr(self, "orig_seg"):
-        print ("Contains old segmentation map.")
+        print("Contains old segmentation map.")
         for b in beams:
             beam = beams[b]
 
@@ -892,7 +888,7 @@ def mod_compute_model_orders(
             seg_ids_copy = deepcopy(beam.seg_ids)
             beam.seg_ids = old_obj_ids
 
-            print (f"old_obj_ids: {old_obj_ids}")
+            print(f"old_obj_ids: {old_obj_ids}")
 
             new_modelf = np.zeros_like(beam.modelf)
             for i, o in enumerate(old_obj_ids):
@@ -931,7 +927,7 @@ def mod_compute_model_orders(
 
                     new_modelf += result
                 except Exception as e:
-                    print (f"Error in model computation: {e}")
+                    print(f"Error in model computation: {e}")
 
             beam.modelf = new_modelf
             beam.model = new_modelf.reshape(beam.sh_beam)

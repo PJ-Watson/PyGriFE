@@ -10,6 +10,7 @@ import astropy.units as u
 import astropy.wcs as pywcs
 import grizli
 import numpy as np
+
 try:
     import sep_pjw as sep
 except:

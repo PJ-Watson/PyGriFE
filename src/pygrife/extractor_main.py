@@ -22,17 +22,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from astropy.coordinates import SkyCoord
-from astropy.wcs import WCS
 from astropy.table import Table
+from astropy.wcs import WCS
 from tqdm import tqdm
-import warnings
 
 if version("sep-pjw").split(".")[1] < "3":
     warnings.warn(
         RuntimeWarning(
-        "Modifying the object catalogue requires SEP>=1.3.0. Please install the fork "
-        "maintained at https://github.com/PJ-Watson/sep-pjw."
-    ))
+            "Modifying the object catalogue requires SEP>=1.3.0. Please install the"
+            " fork maintained at https://github.com/PJ-Watson/sep-pjw."
+        )
+    )
 
 # grizli_dir = Path(
 #     "/Path/to/out/dir" # Point this to the output directory
@@ -76,13 +76,15 @@ try:
     Path(os.getenv("iref")).is_dir()
     Path(os.getenv("jref")).is_dir()
 except:
-    warnings.warn(RuntimeWarning(
-        "Either the grizli environment variables are not set correctly, "
-        "or the directories they point to do not yet exist. "
-        "Check that the environment is correctly configured "
-        "(https://grizli.readthedocs.io/en/latest/grizli/install.html), "
-        "or edit and uncomment the lines above."
-    ))
+    warnings.warn(
+        RuntimeWarning(
+            "Either the grizli environment variables are not set correctly, "
+            "or the directories they point to do not yet exist. "
+            "Check that the environment is correctly configured "
+            "(https://grizli.readthedocs.io/en/latest/grizli/install.html), "
+            "or edit and uncomment the lines above."
+        )
+    )
 
 import grizli
 from grizli import fitting, jwst_utils, model, multifit, prep, utils
@@ -94,6 +96,7 @@ multifit._loadFLT = FLT_fns.load_and_mod_FLT
 model.GrismFLT.transform_JWST_WFSS = FLT_fns.mod_transform_JWST_WFSS
 model.GrismFLT.compute_model_orders = FLT_fns.mod_compute_model_orders
 model.BeamCutout.init_from_input = FLT_fns.init_from_input_multispec
+
 
 class GrismExtractor:
     """
@@ -238,8 +241,8 @@ class GrismExtractor:
 
         if version("sep-pjw").split(".")[1] < "3":
             raise ImportError(
-                "Modifying the object catalogue requires SEP>=1.3.0. Please install the fork "
-                "maintained at https://github.com/PJ-Watson/sep-pjw."
+                "Modifying the object catalogue requires SEP>=1.3.0. Please install the"
+                " fork maintained at https://github.com/PJ-Watson/sep-pjw."
             )
 
         utils.log_comment(
@@ -356,10 +359,14 @@ class GrismExtractor:
 
         if catalog_path is not None:
             if kwargs.get("catalog") is not None:
-                raise Exception("Only one of `catalog` and `catalog_path` can be supplied.")
+                raise Exception(
+                    "Only one of `catalog` and `catalog_path` can be supplied."
+                )
             catalog_path = Path(catalog_path)
         else:
-            catalog_path = Path(self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits")
+            catalog_path = Path(
+                self.out_dir / f"{self.field_root}-{detection_filter}.cat.fits"
+            )
         if not catalog_path.is_file():
             raise FileNotFoundError(
                 f"Catalogue file not found at the specified location: {catalog_path}."
@@ -367,12 +374,16 @@ class GrismExtractor:
 
         if seg_path is not None:
             if kwargs.get("seg_file") is not None:
-                raise Exception("Only one of `seg_path` and `seg_file` can be supplied.")
+                raise Exception(
+                    "Only one of `seg_path` and `seg_file` can be supplied."
+                )
             seg_path = Path(seg_path)
         elif hasattr(self, "seg_name"):
             seg_path = self.out_dir / self.seg_name
         else:
-            seg_path = Path(self.out_dir / f"{self.field_root}-{detection_filter}_seg.fits")
+            seg_path = Path(
+                self.out_dir / f"{self.field_root}-{detection_filter}_seg.fits"
+            )
         if not Path(seg_path).is_file():
             raise FileNotFoundError(
                 f"Segmentation map not found at the specified location: {seg_path}."
@@ -395,6 +406,27 @@ class GrismExtractor:
         column_names: dict | None = None,
         return_all: bool = False,
     ) -> npt.NDArray | tuple[npt.NDArray, astropy.table.Table, astropy.table.Table]:
+        """
+        Match a table of targets against the existing catalogue.
+
+        Parameters
+        ----------
+        targets : astropy.table.Table
+            The targets to match.
+        column_names : dict | None, optional
+            A mapping of old and new column names for the targets table. By
+            default ``None``.
+        return_all : bool, optional
+            Return the object table and all failed matches. By default
+            ``False``, in which case only the matched object IDs will be
+            returned.
+
+        Returns
+        -------
+        npt.NDArray | tuple[npt.NDArray, astropy.table.Table, astropy.table.Table]
+            Either an array of object IDs, or also the table of matched
+            objects, and the table of failed objects.
+        """
 
         if not hasattr(self, "grp"):
             raise Exception(
@@ -406,8 +438,8 @@ class GrismExtractor:
                 targets.rename_column(v, k)
 
         targets.rename_columns(targets.colnames, [c.lower() for c in targets.colnames])
-        
-        print (targets)
+
+        print(targets)
         idx, dr = self.grp.catalog.match_to_catalog_sky(targets)
         indices = []
         failed_indices = []
@@ -439,7 +471,6 @@ class GrismExtractor:
                     except:
                         pass
             return obj_ids, obj, failed_objs
-
 
     def extract_spectra(
         self,
@@ -484,7 +515,10 @@ class GrismExtractor:
             raise Exception(
                 "GrismFLT files not loaded. Run `load_grism_files()' first."
             )
-        if hasattr(self, "seg_name") and Path(self.grp.FLTs[0].seg_file).name != self.seg_name:
+        if (
+            hasattr(self, "seg_name")
+            and Path(self.grp.FLTs[0].seg_file).name != self.seg_name
+        ):
             raise Exception(
                 f"The current segmentation map ({self.seg_name}) does not match the"
                 " name stored in the GrismFLT files"
