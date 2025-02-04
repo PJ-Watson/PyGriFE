@@ -11,10 +11,7 @@ import astropy.wcs as pywcs
 import grizli
 import numpy as np
 
-try:
-    import sep_pjw as sep
-except:
-    import sep
+import sep
 
 # from grizli import utils, prep, jwst_utils, multifit, fitting
 from grizli import prep, utils
@@ -73,8 +70,7 @@ def make_SEP_catalog(
       writing the output to another.
     - Add ``seg_out_path`` parameter, so that the name of the
       segmentation map output can be specified.
-    - Add ``seg_image`` parameter. Using a fork of SEP
-      (``sep >= 1.3.0``, https://github.com/PJ-Watson/sep), passing an
+    - Add ``seg_image`` parameter. Using ``sep>=1.4.0``, passing an
       array here allows one to bypass the object detection, and
       instead derive all the catalogue quantities for the specified
       objects.
